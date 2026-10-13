@@ -1,4 +1,8 @@
 import {SCHEDULE_CUSTOM_CSS_SELECTOR_GROUPS} from './scheduleAppearance';
+export const PSYCHE_SELECTOR_GROUPS = [{
+  label: '心象卡全部结构',
+  selectors: ['.sully-psyche', '.sully-psyche-card', '.sully-psyche-title', '.sully-psyche-preview', '.sully-psyche-body'],
+}] as const;
 
 
 export const BUBBLE_SELECTOR_GROUPS = [
@@ -20,6 +24,7 @@ export const BUBBLE_SELECTOR_GROUPS = [
 ] as const;
 
 export const WHITEBOX_SELECTOR_GROUPS = [
+  ...PSYCHE_SELECTOR_GROUPS,
   {label:'所有 App 卡片的统一外壳',selectors:['.sully-chat-card','.sully-chat-card-surface','.sully-chat-card-content']},
   {
     label: '整屏与顶栏',
@@ -82,9 +87,9 @@ export const WHITEBOX_LAYOUT_REFERENCE = `【布局说明与设计自由度】
 每轮头像在上方时，显示默认隐藏的 .sully-chat-turn-avatar-slot、隐藏 .sully-chat-message-avatar，给 .sully-chat-message-group-first 留出顶部空间，并清零 .sully-chat-message-content 的左右 margin。已有头像贴图 .sully-chat-avatar-frame 可隐藏以免重叠。
 不限于换颜色：可设计渐变、图案、图片背景、多层叠加、异形切角、描边、内外阴影、文字层级和伪元素挂饰，重新组织顶栏视觉。静态 blur/backdrop-filter 可用，持续动画仅用 transform/opacity 并尊重 prefers-reduced-motion。
 `;
-export const WHITEBOX_DESIGN_RULES=`白框默认沿用聊天背景、顶栏、输入栏和双方消息与头像的结构，内容样式只要求三类：普通聊天、语音条、转账。如果用户只要求其中一部分，就只设计该部分。
+export const WHITEBOX_DESIGN_RULES=`白框默认沿用聊天背景、顶栏、输入栏和双方消息与头像的结构，内容样式只要求四类：普通聊天、语音条、转账、心象（折叠/展开）。如果用户只要求其中一部分，就只设计该部分。
 其他 App 卡片仅在用户明确点名时增加样式；未点名保留原样，不需要逐项覆盖，也不要主动用通用卡片样式重画它们。点名的卡片可用 .sully-chat-card[data-card-kind="对应类型"] 精确定位，子类型用 data-card-variant；不要依赖 Tailwind 类或 nth-child。HTML 卡片仍不能跨 iframe 修改内容。
-图片、表情保持比例。
+心象使用 .sully-psyche-card/title/preview/body，保留折叠与展开的可读性。图片、表情保持比例。
 转账 data-status 为 pending/accepted/returned，金额与接收/退回操作不可隐藏。语音应覆盖加载、播放与字幕。
 360—430px 窄屏，长文本换行；顶栏保留 var(--safe-top)，输入栏保留安全区。覆盖内联样式时使用 !important。禁止全局 body/html/* 选择器和持续模糊动画，禁止隐藏返回、发送及操作按钮。
 头像装饰放 .sully-chat-avatar-wrap::after，pointer-events:none；容器 overflow:visible，裁剪仅作用于图片。组首头像使用 .sully-chat-turn-avatar-slot，不依赖元素序号。

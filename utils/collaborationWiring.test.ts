@@ -262,16 +262,16 @@ describe('collaboration sidecar wiring', () => {
     expect(windowSource).toContain('text-slate-700 active:bg-slate-100');
   });
 
-  it('removes heart prompts, requests and cards from collaboration', () => {
+  it('uses the ChatApp thinking prompt and keeps model reasoning separate from the deliverable', () => {
     const context = read('features/collaboration/context.ts');
     const engine = read('features/collaboration/engine.ts');
     const windowSource = read('features/collaboration/CollaborationWindow.tsx');
-    expect(context).not.toContain('buildThinkingChainPrompt');
-    expect(context).not.toContain('collaborationThinkingPrompt');
-    expect(engine).not.toContain("requestBody.reasoning_effort = 'medium'");
-    expect(engine).not.toContain("requestBody.thinking = { type: 'enabled', budget_tokens: 4000 }");
-    expect(windowSource).not.toContain('CollaborationThinkingBlock');
-    expect(windowSource).not.toContain('thinkingChain: reply.thinkingChain');
+    expect(context).toContain("from '../../utils/thinkingChainPrompt'");
+    expect(context).toContain('buildThinkingChainPrompt(char.name, user.name)');
+    expect(engine).toContain("requestBody.reasoning_effort = 'medium'");
+    expect(engine).toContain("requestBody.thinking = { type: 'enabled', budget_tokens: 4000 }");
+    expect(windowSource).toContain('CollaborationThinkingBlock');
+    expect(windowSource).toContain('thinkingChain: reply.thinkingChain');
   });
 
   it('asks before archive memory writes and dual-writes when memory palace is enabled', () => {

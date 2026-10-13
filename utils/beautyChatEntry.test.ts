@@ -9,7 +9,7 @@ import { handleLocalBack } from './localBackHandlers';
 const mocks=vi.hoisted(()=>({update:vi.fn(),open:vi.fn(),active:vi.fn(),done:vi.fn(),read:vi.fn<(...args:any[])=>Promise<any>>(async()=>null),share:vi.fn(),wardrobe:vi.fn(),theme:vi.fn()}));
 vi.mock('../context/OSContext',()=>({useOS:()=>({characters:[{id:'a',name:'甲'},{id:'b',name:'乙'}],activeCharacterId:'b',theme:{},updateTheme:mocks.theme,updateCharacter:mocks.update,addCustomTheme:vi.fn(),setActiveCharacterId:mocks.active,openApp:mocks.open,closeApp:vi.fn(),applyAppearancePreset:vi.fn()})}));
 vi.mock('./db',()=>({DB:{getAsset:mocks.read,getAssetRaw:mocks.read,saveAsset:vi.fn()}}));
-vi.mock('./chatDecoration',async()=>({...await vi.importActual<any>('./chatDecoration'),validateDecoration:(v:unknown)=>v,decorationPatches:vi.fn(async()=>({character:{thinkingChainStyle:'echo'}}))}));
+vi.mock('./chatDecoration',()=>({validateDecoration:(v:unknown)=>v,decorationPatches:vi.fn(async()=>({character:{thinkingChainStyle:'echo'}}))}));
 vi.mock('./beautyUsage',()=>({startBeautyUsage:vi.fn(),decorationSourceKey:async()=>'test',rememberBeautySource:vi.fn()}));
 vi.mock('../components/share/BeautyRepoInvitation',()=>({BeautyRepoLibrary:()=>null}));
 vi.mock('../components/share/BeautySharePanel',()=>({default:(props:any)=>{mocks.share(props);return null;}}));
@@ -84,7 +84,7 @@ it.each([undefined,'a'])('separates browsing but supplies every category to the 
   const visible=mocks.wardrobe.mock.calls.filter(call=>call[1]==='我的收藏').at(-1)![0].map((item:any)=>item.name);
   expect(visible).toEqual(targetCharacterId?['我的白框']:['桌面','我的日程','我的日记']);
   const tabs=host.querySelector('.wardrobe-categories')!.textContent!;
-  expect(tabs.includes('心象')).toBe(false);expect(tabs.includes('日程表')).toBe(!targetCharacterId);
+  expect(tabs.includes('心象')).toBe(!!targetCharacterId);expect(tabs.includes('日程表')).toBe(!targetCharacterId);
   const click=async(text:string)=>act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes(text))!.click();});
   await click('分享装扮');await click('码分享');
   const author=mocks.share.mock.lastCall![0];expect(author.surface).toBe('author');expect(author.unified).toBe(true);

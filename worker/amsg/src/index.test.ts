@@ -1549,7 +1549,7 @@ describe('云端思考链随首条 push 回客户端', () => {
   // 字段名各家不一样：reasoning_content 是 deepseek-r1 / GLM 那批，OpenRouter 转出来叫
   // reasoning，还有渠道写 thinking。只认一个的话，换个渠道就静默没有卡片了。
   it.each(['reasoning_content', 'reasoning', 'thinking'] as const)(
-    '响应字段 %s 的思考不再回传，正文不带 <think>',
+    '响应字段 %s 里的思考 → 挂第一条 push，正文不带 <think>',
     async (field) => {
       const decision = await instantFire([{
         output: TWO_SEGMENT_OUTPUT,
@@ -1560,7 +1560,7 @@ describe('云端思考链随首条 push 回客户端', () => {
       expect(decision.decision).toBe('finish');
       const payloads = decision.pushPayloads as Array<Record<string, any>>;
       expect(payloads.length).toBeGreaterThanOrEqual(2);
-      expect(payloads[0].metadata.amsgReasoning).toBeUndefined();
+      expect(payloads[0].metadata.amsgReasoning).toContain('先接住再问一句');
       for (const payload of payloads.slice(1)) {
         expect(payload.metadata.amsgReasoning).toBeUndefined();
       }
@@ -1574,7 +1574,7 @@ describe('云端思考链随首条 push 回客户端', () => {
     expect(decision.decision).toBe('finish');
     const payloads = decision.pushPayloads as Array<Record<string, any>>;
     expect(payloads.length).toBeGreaterThanOrEqual(2);
-    expect(payloads[0].metadata.amsgReasoning).toBeUndefined();
+    expect(payloads[0].metadata.amsgReasoning).toContain('他好像有点累了');
     for (const payload of payloads.slice(1)) {
       expect(payload.metadata.amsgReasoning).toBeUndefined();
     }
@@ -1584,7 +1584,7 @@ describe('云端思考链随首条 push 回客户端', () => {
 
   // 工具循环一次 fire 跑好几轮，每轮都有自己的思考。留最后一轮的：用户看到的正文就是
   // 那一轮写的，配上「我先去查一下」的中间轮思考等于答非所问。
-  it('多轮工具循环也不回传心象', async () => {
+  it('多轮工具循环 → 留下产出正文那一轮的思考', async () => {
     const decision = await instantFire([
       { output: '等我想想。\n[[RECALL: 2026-06]]', reasoning: '第一轮：先去翻六月的记忆。' },
       { output: '想起来了，那天你说想去看海。', reasoning: '第二轮：翻到了那天的事，说给他听。' },
@@ -1592,8 +1592,8 @@ describe('云端思考链随首条 push 回客户端', () => {
 
     expect(decision.decision).toBe('finish');
     const meta = decision.pushPayloads[0].metadata;
-    expect(meta.amsgReasoning).toBeUndefined();
-    expect(meta.amsgReasoning).toBeUndefined();
+    expect(meta.amsgReasoning).toContain('第二轮');
+    expect(meta.amsgReasoning).not.toContain('第一轮');
   });
 
   // 「留最后一轮的」包括最后一轮没思考的情形：这时候一个字段都不挂。拿中间轮那句
@@ -1643,7 +1643,7 @@ describe('云端思考链随首条 push 回客户端', () => {
   // 只有一段正文时，思考链（挂第一条）和情绪评估（挂最后一条）落在同一条 push 上。
   // 两次挂载各自 spread 一遍 metadata，谁把谁盖掉都是静默的：要么没有心象卡片、
   // 要么情绪永远不更新，而日志上什么都看不出来。
-  it('只有一条 push 时仍保留情绪评估，不挂心象', async () => {
+  it('只有一条 push 时思考链和情绪评估同时挂上，谁也不盖谁', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: '{"changed":true,"buffs":[]} EVAL-RAW-MARKER' } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } })));
@@ -1662,7 +1662,7 @@ describe('云端思考链随首条 push 回客户端', () => {
     const payloads = decision.pushPayloads as Array<Record<string, any>>;
     expect(payloads).toHaveLength(1);
     const meta = payloads[0].metadata;
-    expect(meta.amsgReasoning).toBeUndefined();
+    expect(meta.amsgReasoning).toContain('他终于开口了');
     expect(meta.amsgEmotionUpdate).toContain('EVAL-RAW-MARKER');
     expect(meta.amsgEmotionDone).toBe(true);
   });

@@ -54,6 +54,7 @@ import { appendInstantTraceEntry } from '../utils/instantTraceLog';
 import { AMSG2_TOOL_NAMES, buildAmsg2Tools, createAmsg2ToolSession, executeAmsg2ToolWithOutcome, isAmsg2GlobalReady, type Amsg2ToolOutcome } from '../utils/amsg2ToolBridge';
 import { AMSG2_EMPTY_REPLY_PROMPT, AMSG2_WRAP_UP_PROMPT, createAmsg2StallTracker, extractToolRoundLeadIn, mergeToolRoundLeadIns } from '../utils/amsg2ToolLoop';
 import { buildLimitsBrief, resolveAmsgLimits } from '../utils/amsgLimits';
+import { shouldSendThinkingParams } from '../utils/thinkingGate';
 import { buildClaudeProxyCompatibilityBody, shouldRetryClaudeProxyCompatibility } from '../utils/claudeProxyCompat';
 import { routeMiniAppToolCall } from '../utils/miniAppToolRoute';
 import { applyEmotionEvalRaw, extractAssistantText } from '../utils/emotionApply';
@@ -920,7 +921,7 @@ export const useChatAI = ({
                 musicSnapshot: music,
                 translationConfig,
                 htmlMode: { enabled: !!(char as any).htmlModeEnabled, customPrompt: (char as any).htmlModeCustomPrompt },
-
+                thinkingChain: { enabled: !!(char as any).showThinkingChain, customPrompt: (char as any).thinkingChainCustomPrompt },
                 visionApiConfig: apiConfig.visionApi,
                 mcdMiniSnap: mcdMiniOpen ? mcdMiniSnap : undefined,
                 luckinMiniSnap: luckinMiniOpen ? luckinMiniSnap : undefined,
@@ -1091,7 +1092,41 @@ export const useChatAI = ({
                 max_tokens: 8000,
                 stream: userStream,
             };
+            // 思考过程展示开启时显式向后端请求 extended thinking。
+            // 不同代理认不同入口，全都试一遍，代理不识别的会自动忽略：
+            //  - 模型名 -thinking 后缀：packycode / anyrouter 等第三方 Claude 中转的主流约定
+            //  - thinking.type='enabled' / budget_tokens：Anthropic 原生与多数官方代理
+            //  - reasoning_effort：OpenAI 系（o1/o3、GLM-4.5、deepseek-reasoner 等）
+            //  - extra_body.thinking：LiteLLM 系桥
+            // 关掉则一个都不传，避免无谓的 thinking token 计费。
+            // ⚠️ 工具模式(瑞幸点单/麦当劳)下绝不带 thinking/reasoning 参数: "thinking + tools" 同发
+            //    Gemini 等会直接 400 INVALID_ARGUMENT —— 表现就是"开了思考链的角色一点单就报错,
+            //    换个没开思考链的角色就好"。工具循环优先, 思考链这一轮让步。
+            const toolModeActive = payload.flags.luckinChatActive || payload.flags.mcdActive || payload.flags.luckinActive || payload.flags.mcpChatActive;
+            // 主动消息 2.0 的工具本轮会不会注入：thinking 门要先知道这件事（工具在下面才真正
+            // 拼进 tools，但参数取舍必须现在就定）。角色级开关关掉的不注入——否则被用户显式
+            // 关掉的功能会被角色一次工具调用重新打开。
             const amsg2ToolsInjected = isAmsg2EnabledForChar(char) && await replyStep(async () => isAmsg2GlobalReady());
+            if (shouldSendThinkingParams({
+                thinkingActive: !!payload.flags.thinkingActive,
+                legacyToolModeActive: !!toolModeActive,
+                amsg2ToolsInjected,
+                model: baseReqBody.model || '',
+            })) {
+                const m: string = baseReqBody.model || '';
+                if (/^claude-/i.test(m) && !/-thinking$/i.test(m)) {
+                    baseReqBody.model = `${m}-thinking`;
+                }
+                baseReqBody.thinking = { type: 'enabled', budget_tokens: 4000 };
+                baseReqBody.reasoning_effort = 'medium';
+                baseReqBody.extra_body = { ...(baseReqBody.extra_body || {}), thinking: { type: 'enabled', budget_tokens: 4000 } };
+                // 开思考时不要带采样参数: Claude 系（含各种中转 claude-*）在 thinking 启用时
+                // 只接受 temperature=1，传 0.85 会被 400 ("temperature may only be set to 1 when
+                // thinking is enabled")。删掉让服务端用默认即可——对其它模型(非 Claude)也安全:
+                // 它们开思考时同样不需要我们指定温度，回退默认不影响行为。
+                delete baseReqBody.temperature;
+                delete baseReqBody.top_p;
+            }
             // 流式时显式要求 usage 统计随末尾 chunk 一起返回，否则 token 徽标拿不到数据
             if (userStream) {
                 baseReqBody.stream_options = { include_usage: true };

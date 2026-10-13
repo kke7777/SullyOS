@@ -2,6 +2,7 @@ import type { CharacterProfile, Emoji, EmojiCategory, GroupProfile, Message, Rea
 import { ContextBuilder } from '../../utils/context';
 import { buildChatRequestPayload } from '../../utils/chatRequestPayload';
 import { ChatPrompts } from '../../utils/chatPrompts';
+import { buildThinkingChainPrompt } from '../../utils/thinkingChainPrompt';
 import { MemoryNodeDB } from '../../utils/memoryPalace/db';
 import { injectMemoryPalace } from '../../utils/memoryPalace/pipeline';
 import type { MemoryNode } from '../../utils/memoryPalace/types';
@@ -28,6 +29,12 @@ format: docx
 - artifact 块之外的文字会作为你发给用户的聊天消息；不要向用户解释这个内部格式。
 - 这间窗口能真正渲染普通文字、Markdown、表情包、语音条、文件与可安装作品。不要输出这里没有实现的 ChatApp 动作：引用、戳一戳、转账、日历、定时消息、搜索、读写日记、HTML 聊天气泡或其它 [[ACTION:...]] / [[RECALL:...]] 指令。
 - 本窗口与其它协同窗口互不共享对话，也不会自动写回日常聊天或角色记忆。`;
+
+const collaborationThinkingPrompt = (char: CharacterProfile, user: UserProfile): string => {
+  if (!char.showThinkingChain) return '';
+  const custom = (char.thinkingChainCustomPrompt || '').trim();
+  return `\n\n${buildThinkingChainPrompt(char.name, user.name)}${custom ? `\n\n### 用户追加的心象规则\n${custom}` : ''}`;
+};
 
 const collaborationRichOutputPrompt = (
   char: CharacterProfile,
@@ -122,7 +129,7 @@ export const buildCollaborationContextSnapshot = async ({
       `### 当前模式\n用户选择了“中度协同”：保留完整核心人格、世界观和用户设定；不载入世界书、用户印象或其它协同窗口。任务相关记忆会在每一次发送时重新召回，最多 5 条。\n\n`,
       COLLABORATION_PROTOCOL,
       collaborationRichOutputPrompt(char, emojis, categories),
-
+      collaborationThinkingPrompt(char, user),
     ].join('');
   }
 
@@ -144,7 +151,7 @@ export const buildCollaborationContextSnapshot = async ({
     `### 当前模式\n用户选择了“沉浸式协同”：完整保留角色、关系、世界观、世界书、用户印象和日常记忆，同时把完成当前任务放在本会话的最前面。任务相关记忆会像 ChatApp 一样在每一次发送时重新召回；其它协同窗口的对话仍不进入这里。\n\n`,
     COLLABORATION_PROTOCOL,
     collaborationRichOutputPrompt(char, emojis, categories),
-
+    collaborationThinkingPrompt(char, user),
   ].join('');
 };
 
@@ -203,6 +210,10 @@ export const buildLiveCollaborationChatContext = async ({
     // Collaboration renders Markdown/files/installables rather than ChatApp's
     // HTML bubble protocol. Keeping it enabled would expose raw [html] blocks.
     htmlMode: { enabled: false },
+    thinkingChain: {
+      enabled: !!(char as CharacterProfile & { showThinkingChain?: boolean }).showThinkingChain,
+      customPrompt: (char as CharacterProfile & { thinkingChainCustomPrompt?: string }).thinkingChainCustomPrompt,
+    },
     stripImages: true,
   });
 

@@ -12,7 +12,7 @@ const preset={format:'sullyos-chat-decoration',version:1,name:'完整白框',par
 describe('complete whitebox contract',()=>{
  it('isolates catalog parts while keeping individual previews in the full chat',()=>{
   const psyche=renderChatDecorationSample(preset,'psyche','psyche').markup;
-  expect(psyche).not.toContain('sully-psyche-card');
+  expect(psyche).toContain('sully-psyche-card');
   expect(psyche).not.toContain('sully-chat-header');
   expect(psyche).not.toContain('sully-chat-inputbar');
   expect(psyche).not.toContain('回来就好');
@@ -26,7 +26,7 @@ describe('complete whitebox contract',()=>{
  it('allows card and psyche hooks while rejecting page-wide styles',()=>{
   expect(validateScopedCss('.sully-chat-card[data-card-kind="music_card"] .sully-chat-card-surface{padding:8px}.sully-psyche-body{color:red}',WHITEBOX_SCOPE_REGEX,WHITEBOX_SCOPE_HINT).isValid).toBe(true);
   expect(validateScopedCss('body{display:none}',WHITEBOX_SCOPE_REGEX,WHITEBOX_SCOPE_HINT).isValid).toBe(false);
-  expect(WHITEBOX_AI_PROMPT).not.toContain('.sully-psyche-body');
+  expect(WHITEBOX_AI_PROMPT).toContain('.sully-psyche-body');
   expect(WHITEBOX_AI_PROMPT).toContain('data-card-kind');
   expect(WHITEBOX_AI_PROMPT).toContain('.sully-collaboration-file-action');
   expect(WHITEBOX_AI_PROMPT).toContain('.sully-schedule-change');
@@ -40,7 +40,7 @@ describe('complete whitebox contract',()=>{
  });
  it('includes every message type and expanded psyche and transfer states',()=>{
   expect(Object.keys(CHAT_TYPE_SAMPLES)).toHaveLength(28);
-  expect(renderChatDecorationSample(preset,'psyche-open').markup).not.toContain('sully-psyche-body');
+  expect(renderChatDecorationSample(preset,'psyche-open').markup).toContain('sully-psyche-body');
   expect(renderChatDecorationSample(preset,'music_card').markup).toContain('data-card-kind="music_card"');
   expect(renderChatDecorationSample(preset,'transfer-accepted').markup).toContain('data-status="accepted"');
  });

@@ -7,22 +7,22 @@ describe('preset-specific previews',()=>{
   const started = performance.now();
   expect(scenes({css})).toEqual(['conversation']);
   expect(performance.now()-started).toBeLessThan(1500);
-  expect(scenes({css:'@media(max-width:600px){.sully-psyche-card{color:red}}'})).toEqual(['conversation']);
+  expect(scenes({css:'@media(max-width:600px){.sully-psyche-card{color:red}}'})).toEqual(['psyche','psyche-open']);
  });
  it('offers the full fixture catalog in the composer, even for a standalone part',()=>{
   const ids=decorationPreviewScenes({parts:{psyche:{styleId:'echo'}}},'all').map(scene=>scene.id);
-  expect(ids).toEqual(expect.arrayContaining(['all','conversation','emoji','image','music_card','world_card','html_card','collaboration_file','transfer','voice']));
+  expect(ids).toEqual(expect.arrayContaining(['all','conversation','emoji','image','music_card','world_card','html_card','collaboration_file','transfer','voice','psyche']));
   expect(decorationPreviewScenes({parts:{}},'all').map(scene=>scene.id)).toEqual(ids);
  });
- it('uses a normal conversation preview for legacy psyche-only presets',()=>{
-  expect(scenes({psyche:{styleId:'echo'}})).toEqual(['conversation']);
-  expect(scenes({css:'.sully-psyche-body{color:red}'})).toEqual(['conversation']);
+ it('shows only psyche states for standalone psyche',()=>{
+  expect(scenes({psyche:{styleId:'echo'}})).toEqual(['psyche','psyche-open']);
+  expect(scenes({css:'.sully-psyche-body{color:red}'})).toEqual(['psyche','psyche-open']);
  });
  it('keeps default whitebox to the four core categories',()=>{
   const ids=scenes({css:'.sully-chat-root{color:red}'});
   expect(ids).toContain('transfer-accepted');
   expect(ids).toContain('voice-playing');
-  expect(ids).not.toContain('psyche-open');
+  expect(ids).toContain('psyche-open');
   expect(ids).not.toContain('all');
   expect(ids).not.toContain('music_card');
  });
@@ -31,6 +31,6 @@ describe('preset-specific previews',()=>{
   expect(scenes({css:'.sully-chat-card[data-card-kind="score_card"][data-card-variant="diary_card"]{color:red}'})).toEqual(['diary']);
  });
  it('ignores card names in comments and declaration strings',()=>{
-  expect(scenes({css:'/* [data-card-kind="music_card"] */ .sully-psyche-card{content:\'[data-card-kind="world_card"]\'}'})).toEqual(['conversation']);
+  expect(scenes({css:'/* [data-card-kind="music_card"] */ .sully-psyche-card{content:\'[data-card-kind="world_card"]\'}'})).toEqual(['psyche','psyche-open']);
  });
 });

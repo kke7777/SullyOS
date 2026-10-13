@@ -38,10 +38,11 @@ export function decorationPreviewScenes(value: unknown, scope: 'preset'|'all' = 
   const ids = new Set<string>();
   const add = (...scenes: string[]) => scenes.forEach(id => ids.add(id));
   if (p.layout || p.background || /\.sully-chat-(?:root|header|inputbar|composer|message)(?![\w-])/.test(selectors)) {
-    add('conversation','voice','voice-loading','voice-playing','transfer','transfer-accepted','transfer-returned');
+    add('conversation','voice','voice-loading','voice-playing','transfer','transfer-accepted','transfer-returned','psyche','psyche-open');
   }
   if (p.bubbles || /\.sully-bubble[\w-]*/.test(selectors)) add('conversation');
   if (p.bubbles || /\.sully-voice-bar[\w-]*/.test(selectors)) add('voice','voice-loading','voice-playing');
+  if (p.psyche || /\.sully-psyche[\w-]*/.test(selectors)) add('psyche','psyche-open');
   if (/\.sully-chat-transfer-/.test(selectors)) add('transfer','transfer-accepted','transfer-returned');
   if (/\.sully-collaboration-file/.test(selectors)) add('collaboration_file');
   if (/\.sully-schedule-change/.test(selectors)) add('schedule');

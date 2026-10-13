@@ -75,6 +75,7 @@ interface ChatInputAreaProps {
     // HTML 模块模式
     htmlModeEnabled?: boolean;
     // 思考过程展示（会话级）
+    showThinkingChain?: boolean;
     // Input style
     inputStyle?: 'default' | 'rounded' | 'flat' | 'wechat' | 'ios' | 'telegram' | 'discord' | 'pixel';
     sendButtonStyle?: 'circle' | 'pill' | 'minimal';
@@ -103,6 +104,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     luckinConfigured = false,
     luckinActivated = false,
     htmlModeEnabled = false,
+    showThinkingChain = false,
     inputStyle = 'default',
     sendButtonStyle = 'circle',
     chromeStyle = 'soft',
@@ -598,6 +600,21 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               {htmlModeEnabled && <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 ${isDiscordStyle ? 'bg-fuchsia-400 border-slate-900' : 'bg-fuchsia-500 border-white'}`} />}
           </div>)}
           <span className="text-xs font-bold">{htmlModeEnabled ? 'HTML已开' : 'HTML模式'}</span>
+        </button>,
+        <button key="thinking-settings"
+          onClick={() => onPanelAction('thinking-settings')}
+          className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${acnh ? 'text-[#725d42]' : isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}
+        >
+          {acnh ? <div className="relative"><AcnhActionTile kind="thinking" />{showThinkingChain && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#889df0] border-2 border-white" />}</div> : (
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border relative ${
+              showThinkingChain
+                ? (isDiscordStyle ? 'bg-indigo-500/20 text-indigo-300 border-indigo-400/40' : 'bg-indigo-100 text-indigo-600 border-indigo-200')
+                : (isDiscordStyle ? 'bg-slate-800 text-indigo-300 border-indigo-400/20' : 'bg-indigo-50 text-indigo-500 border-indigo-100')
+          }`}>
+              <Brain className="w-6 h-6" weight="bold" />
+              {showThinkingChain && <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 ${isDiscordStyle ? 'bg-indigo-400 border-slate-900' : 'bg-indigo-500 border-white'}`} />}
+          </div>)}
+          <span className="text-xs font-bold">{showThinkingChain ? '思考已开' : '展示思考'}</span>
         </button>,
         <button key="chrome-css"
           onClick={() => onPanelAction('chrome-css')}

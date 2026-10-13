@@ -1,4 +1,4 @@
-import {BUBBLE_SELECTOR_GROUPS,WHITEBOX_SELECTOR_GROUPS,WHITEBOX_DESIGN_RULES,WHITEBOX_OPTIONAL_CARD_REFERENCE,WHITEBOX_LAYOUT_REFERENCE,WHITEBOX_SCOPE_REGEX,WHITEBOX_SCOPE_HINT} from '../../utils/chatWhitebox';
+import {BUBBLE_SELECTOR_GROUPS,WHITEBOX_SELECTOR_GROUPS,PSYCHE_SELECTOR_GROUPS,WHITEBOX_DESIGN_RULES,WHITEBOX_OPTIONAL_CARD_REFERENCE,WHITEBOX_LAYOUT_REFERENCE,WHITEBOX_SCOPE_REGEX,WHITEBOX_SCOPE_HINT} from '../../utils/chatWhitebox';
 import type {
   BubbleStyle,
   ChatTheme,
@@ -78,7 +78,7 @@ const ALL_COLLABORATION_MAKERS: CollaborationMakerDefinition[] = [
   },
   {
     kind: 'whitebox-css', label: '白框制作', shortLabel: '白框', target: 'character', accent: '#ec4899',
-    description: '聊天外壳与普通聊天、语音条、转账；其他卡片按需设计。',
+    description: '聊天外壳与普通聊天、语音条、转账、心象；其他卡片按需设计。',
     prompt: protocol('whitebox-css', '{ "css": ".sully-chat-root{...}" }', cssDesignBrief('聊天白框、消息布局与整屏外壳', WHITEBOX_SELECTOR_GROUPS, WHITEBOX_LAYOUT_REFERENCE + WHITEBOX_OPTIONAL_CARD_REFERENCE + '\n【实际输出要求：完整接口清单不等于必须逐项输出】\n' + WHITEBOX_DESIGN_RULES + '转账与头像框选择器已经在真实聊天页面开放，可直接使用，不需要用户另行添加白名单。转账主卡/回执用 data-status 区分 pending/accepted/returned（回执无 pending）。头像框画在 .sully-chat-avatar-wrap::after，使用透明背景图、pointer-events:none，容器 overflow:visible；圆角或 clip-path 只作用于 .sully-chat-message-avatar-img。已有贴图 .sully-chat-avatar-frame 可隐藏避免叠加。顶栏头像是 img，不可用伪元素。顶栏已预留安全区；需要贴顶时使用 var(--safe-top)。若做“每轮头像在上方”，显示 .sully-chat-turn-avatar-slot、隐藏 .sully-chat-message-avatar，并同步调整组首留白和消息列边距。')),
   },
   {
@@ -111,6 +111,11 @@ const ALL_COLLABORATION_MAKERS: CollaborationMakerDefinition[] = [
     kind: 'schedule-css', label: '日程卡美化', shortLabel: '日程卡', target: 'global', accent: '#d97706',
     description: '桌面、房间与聊天共用的日程卡片。',
     prompt: protocol('schedule-css', '{ "css": ".sully-schedule-root{...}" }', cssDesignBrief('日程卡与修改回执', SCHEDULE_CUSTOM_CSS_SELECTOR_GROUPS, '可在 .sully-schedule-root 声明并复用 --schedule-bg、--schedule-text、--schedule-accent、--schedule-accent-soft、--schedule-base、--schedule-line。要同时处理当前事项、普通事项、长描述、紧凑小组件和聊天内修改回执。')),
+  },
+  {
+    kind: 'psyche-css', label: '心象卡制作', shortLabel: '心象卡', target: 'character', accent: '#0891b2',
+    description: '角色思考过程的折叠卡片外观。',
+    prompt: protocol('psyche-css', '{ "css": ".sully-psyche-card{...}" }', cssDesignBrief('心象折叠卡', PSYCHE_SELECTOR_GROUPS, '心象卡要区分标题、折叠速览和展开正文；必须兼顾短念头与长段落，并确保展开内容仍清晰可读。')),
   },
   {
     kind: 'character-card', label: '角色卡制作', shortLabel: '角色卡', target: 'new-character', accent: '#4f46e5',
@@ -237,7 +242,7 @@ export const validateInstallableArtifact = (artifact: CollaborationInstallableAr
   } else if (artifact.kind === 'whitebox-css') requireCss(WHITEBOX_SCOPE_REGEX, WHITEBOX_SCOPE_HINT);
   else if (artifact.kind === 'journal-css') requireCss(JOURNAL_CSS_SCOPE_REGEX, JOURNAL_CSS_SCOPE_HINT);
   else if (artifact.kind === 'schedule-css') requireCss(SCHEDULE_CSS_SCOPE_REGEX, SCHEDULE_CSS_SCOPE_HINT);
-  else if (artifact.kind === 'psyche-css') errors.push('此作品类型已移除。');
+  else if (artifact.kind === 'psyche-css') requireCss(psycheSelector, '.sully-psyche*');
   else if (artifact.kind === 'appearance-preset' && (!artifact.payload.theme || typeof artifact.payload.theme !== 'object')) errors.push('外观预设缺少 theme 配置。');
   else if (artifact.kind === 'character-card') {
     if (typeof artifact.payload.name !== 'string' || !artifact.payload.name.trim()) errors.push('角色卡缺少名字。');
@@ -350,6 +355,7 @@ export const buildInstallablePreviewDocument = (artifact: CollaborationInstallab
   }
   if (artifact.kind === 'journal-css') return `${common}<main class="phone sully-journal-root" style="padding:46px 20px"><div class="label">EXCHANGE JOURNAL</div><article class="sully-journal-paper" style="margin-top:18px;padding:28px 24px;min-height:560px;background:#fffdf8;box-shadow:0 18px 50px #5b49601f"><div class="sully-journal-date">2026 · 08 · 29</div><h1 class="sully-journal-title">留给今天的一页</h1><p class="sully-journal-body">她把没有说完的话写在这里。窗外很安静，纸页上留下了一点柔软的光。</p><div class="sully-journal-timeline">22:31 · Noir</div></article></main></body></html>`;
   if (artifact.kind === 'schedule-css') return `${common}<main class="phone" style="padding:70px 18px"><section class="sully-schedule-root sully-schedule-card" style="--schedule-bg:#21192b;--schedule-text:#f8f3ff;--schedule-accent:#c9a7ff;background:var(--schedule-bg);color:var(--schedule-text);border-radius:24px;padding:20px"><header class="sully-schedule-header"><div class="label">TODAY</div><h2>Noir 的日程</h2></header><div class="sully-schedule-list"><div class="sully-schedule-item sully-schedule-item-current" style="padding:14px;border-left:3px solid var(--schedule-accent)"><b class="sully-schedule-time">22:30</b><div class="sully-schedule-activity">整理协同作品</div><small class="sully-schedule-description">检查预览并把作品归档。</small></div><div class="sully-schedule-item" style="padding:14px"><b class="sully-schedule-time">23:20</b><div class="sully-schedule-activity">夜间阅读</div></div></div></section></main></body></html>`;
+  if (artifact.kind === 'psyche-css') return `${common}<main class="phone" style="padding:90px 20px"><div class="sully-psyche"><section class="sully-psyche-card" style="padding:18px;border-radius:18px;background:#211b38;color:#f5e9c9;border:1px solid #e7c27666"><div class="sully-psyche-title">心象 · ECHO</div><p class="sully-psyche-preview">她说喜欢……那就再把边缘收得更干净一点。</p><div class="sully-psyche-body">先确认保存位置，再交给她使用。</div></section></div></main></body></html>`;
   if (artifact.kind === 'appearance-preset') {
     const patch = installableToThemePatch(artifact);
     const hue = typeof patch.hue === 'number' ? patch.hue : 260;

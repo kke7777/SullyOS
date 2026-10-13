@@ -13,7 +13,7 @@ describe('collaboration installable makers', () => {
     const css='.sully-psyche-body{color:#345!important}.sully-chat-card[data-card-kind="world_card"] .sully-chat-card-surface{border-radius:12px}';
     expect(validateInstallableArtifact({kind:'whitebox-css',title:'完整白框',payload:{css}})).toEqual([]);
     expect(COLLABORATION_MAKER_MAP['whitebox-css'].prompt).toContain('其他 App 卡片仅在用户明确点名时增加样式');
-    expect(COLLABORATION_MAKER_MAP['whitebox-css'].prompt).not.toContain('.sully-psyche-body');
+    expect(COLLABORATION_MAKER_MAP['whitebox-css'].prompt).toContain('.sully-psyche-body');
     expect(COLLABORATION_MAKER_MAP['whitebox-css'].prompt).toContain('diary_card');
     expect(COLLABORATION_MAKER_MAP['whitebox-css'].prompt).toContain('完整接口清单不等于必须逐项输出');
   });
@@ -46,9 +46,9 @@ title: 夜航日记
     expect(errors.join('\n')).toContain('body');
     expect(validateInstallableArtifact({
       kind: 'psyche-css',
-      title: '已移除的心象 CSS',
+      title: '安全 CSS',
       payload: { css: '.sully-psyche-card{border-radius:18px!important;animation:pulse 2s infinite}@keyframes pulse{from{opacity:.8}50%{opacity:1}to{opacity:.8}}' },
-    })).not.toEqual([]);
+    })).toEqual([]);
   });
 
   it('only installs whitelisted appearance fields and native worldbook data', () => {
@@ -104,7 +104,7 @@ title: 夜航日记
   it('covers every user-facing maker in the registry', () => {
     expect(Object.keys(COLLABORATION_MAKER_MAP).sort()).toEqual([
       'appearance-preset', 'bubble-theme', 'character-card', 'journal-css',
-      'schedule-css', 'whitebox-css', 'worldbook',
+      'psyche-css', 'schedule-css', 'whitebox-css', 'worldbook',
     ]);
   });
 
@@ -113,6 +113,7 @@ title: 夜航日记
     const whiteboxPrompt = COLLABORATION_MAKER_MAP['whitebox-css'].prompt;
     const journalPrompt = COLLABORATION_MAKER_MAP['journal-css'].prompt;
     const schedulePrompt = COLLABORATION_MAKER_MAP['schedule-css'].prompt;
+    const psychePrompt = COLLABORATION_MAKER_MAP['psyche-css'].prompt;
     expect(bubblePrompt).toContain('.sully-voice-bar-wave-segment');
     expect(whiteboxPrompt).toContain('.sully-chat-turn-avatar-slot');
     expect(whiteboxPrompt).toContain('.sully-collaboration-file-action');
@@ -124,7 +125,8 @@ title: 夜航日记
     expect(validateInstallableArtifact({ kind: 'whitebox-css', title: '转账和头像框', payload: { css: '.sully-chat-transfer-card[data-status="pending"]{color:red}.sully-chat-avatar-wrap::after{content:"";pointer-events:none}' } })).toEqual([]);
     expect(journalPrompt).toContain('.sully-journal-cursor-spark');
     expect(schedulePrompt).toContain('.sully-schedule-change-shine');
-    for (const prompt of [bubblePrompt, whiteboxPrompt, journalPrompt, schedulePrompt]) {
+    expect(psychePrompt).toContain('.sully-psyche-body');
+    for (const prompt of [bubblePrompt, whiteboxPrompt, journalPrompt, schedulePrompt, psychePrompt]) {
       expect(prompt).toContain('prefers-reduced-motion');
       expect(prompt).toContain('全部可用选择器');
     }

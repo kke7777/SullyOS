@@ -2620,6 +2620,19 @@ export const amsgHooks = {
         });
       }
 
+      // 这次生成的思考链随**第一条** push 回客户端：思考链卡片渲染在第一条气泡上，
+      // 收侧也只在 messageIndex<=1 那条上认领（见 utils/activeMsgRuntime.ts）。
+      // 同样排在旁路存储之前，装不下时才能连它一起挪走。
+      //
+      // 只在即时对话这条路回传。那一轮的 prompt 里带着「心象」提示词（客户端
+      // buildThinkingChainPrompt 打进 fire_pack 的 chat 段），模型的 thinking 写出来是
+      // 角色脑内的嘟囔，当卡片正合适。定时任务这条路的 prompt 是 renderFirePack 现拼的，
+      // 没有那段提示词，thinking 就是原始推理腔（「用户三小时没说话了，我应该……」）——
+      // 那个放进心象卡片就是穿帮。等哪天给 fire_pack 也注入那段提示词，再把这道门放开。
+      if (stash.instant && session.finalReasoning && payloads.length > 0) {
+        payloads = attachMetaAt(payloads, 0, { amsgReasoning: session.finalReasoning });
+      }
+
       // 末条 push 的挂载合成一次：工具痕迹 + 情绪评估结果都跟正文一起收尾。
       //
       // 工具痕迹：气泡底下那行灰字照它渲染。挂最后一条是因为用户读完话才看到

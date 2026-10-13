@@ -17,8 +17,8 @@ it('applying an avatar frame preserves the existing whitebox and background CSS'
  const patch=await decorationPatches(preset,['css'],'character',{id:'a',chromeCustomCss:old} as any,{} as any);
  expect(patch.character.chromeCustomCss).toContain('.sully-chat-header');expect(patch.character.chromeCustomCss).toContain('background:pink');expect(patch.character.chromeCustomCss).toContain('avatar-wrap::after');
  expect(patch.character.chatDecorationCssIsolated).toBeUndefined();
- expect(()=>checkWorkshopCss('bubbles','.sully-chat-header{color:red}')).toThrow();
- expect(()=>checkWorkshopCss('bubbles','.sully-bubble-ai{color:red}')).not.toThrow();
+ expect(()=>checkWorkshopCss('psyche','.sully-chat-header{color:red}')).toThrow();
+ expect(()=>checkWorkshopCss('psyche','.sully-psyche-card{color:red}')).not.toThrow();
 });
 
 it('keeps legacy whitebox CSS unchanged while specialized makers remain scoped',()=>{
@@ -31,7 +31,7 @@ it('keeps legacy whitebox CSS unchanged while specialized makers remain scoped',
 @keyframes old-pulse { from { opacity: 0; } to { opacity: 1; } }`;
  expect(checkWorkshopCss('whitebox',css)).toBe(css);
  expect(()=>checkWorkshopCss('bubbles',css)).toThrow();
- expect(()=>checkWorkshopCss('bubbles','.sully-bubble-ai:is(.a, .b)::after {content:"}"}')).not.toThrow();
+ expect(()=>checkWorkshopCss('psyche','.sully-psyche-card:is(.a, .b)::after {content:"}"}')).not.toThrow();
  expect(()=>checkWorkshopCss('whitebox','.flex {color:red')).toThrow('未闭合');
 });
 

@@ -78,6 +78,57 @@ export {
     normalizeRecallPlan,
     runLightRecallRouter,
 } from './recallRouter';
+export {
+    analyzeUserInteraction,
+    renderInteractionAdaptationGuidance,
+    resolveAccommodationPolicy,
+    DEFAULT_CHARACTER_ACCOMMODATION,
+    INTERACTION_TREND_MESSAGE_SCAN_LIMIT,
+    INTERACTION_TREND_TURN_LIMIT,
+} from './interactionAdaptation';
+export {
+    analyzeDeepEngagement,
+    renderDeepEngagementGuidance,
+} from './deepEngagement';
+export type {
+    ConversationDepthSignals,
+    ConversationDepthState,
+    DeepEngagementAnalysis,
+    EngagementMode,
+} from './deepEngagement';
+export {
+    advanceConversationEngagement,
+    analyzeConversationEngagement,
+    clearConversationEngagementState,
+    loadConversationEngagementState,
+    renderConversationEngagementGuidance,
+    saveConversationEngagementState,
+    shouldUseLegacyDeepEngagement,
+    CONVERSATION_ENGAGEMENT_ENGINE_KEY,
+    CONVERSATION_ENGAGEMENT_STORAGE_PREFIX,
+    CONVERSATION_ENGAGEMENT_VERSION,
+} from './conversationEngagement';
+export type {
+    ActiveConversationSubject,
+    ConversationAct,
+    ConversationEngagementAdvanceResult,
+    ConversationEngagementAnalysis,
+    ConversationEngagementReason,
+    ConversationInteractionMode,
+    EngagementState,
+    GroundedConversationFact,
+    ProgressiveConversationStance,
+    ResponseAct,
+    ResponsePlan,
+    StoredConversationEngagementState,
+    SubjectHook,
+    SubjectHookKind,
+} from './conversationEngagement';
+export type {
+    InteractionSurfaceState,
+    ResolvedAccommodationPolicy,
+    UserInteractionAnalysis,
+} from './interactionAdaptation';
 export type {
     ContextSignals,
     LocalContextAnalysis,

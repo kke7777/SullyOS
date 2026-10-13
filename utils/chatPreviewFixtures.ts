@@ -45,6 +45,8 @@ export const CHAT_PREVIEW_SCENES:ChatPreviewScene[] = [
   msg(101,'text','我也有想分享的！',undefined,'user'),
   msg(160,'text','我发现了一套很喜欢的美化，想换上试试。连着说两句，也能看看气泡和头像的间距。',undefined,'user'),
  ]),
+ scene('psyche','心象 · 折叠',[msg(103,'text','回来就好。',{thinkingChain:'听到开门的声音，忽然想把刚才看到的那朵云也分享给你。这段文字只是用来检查心象排版的示例。'})]),
+ scene('psyche-open','心象 · 展开',[msg(104,'text','回来就好。',{thinkingChain:'听到开门的声音，忽然想把刚才看到的那朵云也分享给你。\n\n这是一段较长的虚构文字，用来检查字号、行距、换行和展开后的阅读效果。'})],{expanded:true}),
  scene('transfer','转账 · 待接收',[CHAT_TYPE_SAMPLES.transfer]),
  ...(['accepted','returned'] as const).map((status,i)=>scene('transfer-'+status,status==='accepted'?'转账 · 已接收与回执':'转账 · 已退回与回执',[msg(110+i,'transfer','热饮',{amount:25,status,note:'给你买一杯热饮'}),msg(120+i,'transfer','回执',{amount:25,receipt:status},'user')])),
  scene('voice','语音',[msg(130,'text','<语音>晚安，明天见。</语音>'),CHAT_TYPE_SAMPLES.voice]),

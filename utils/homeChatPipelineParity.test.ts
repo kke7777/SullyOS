@@ -69,8 +69,8 @@ it.each(['chat_app','home_3d'] as const)('%s uses interactive recall and reads r
  vi.spyOn(plates,'buildRoomPlatesInjection').mockResolvedValue('无需向量配置的常驻门牌');
  const char:any={id:'recall-'+entryPoint,name:'C',memoryPalaceEnabled:true};
  const trace=await palace.injectMemoryPalace(char,[{id:1,charId:char.id,role:'user',type:'text',content:'我过啦！！！',timestamp:Date.now()}],undefined,'小雨',{entryPoint});
- expect(trace.interactionAdaptation?.status).toBe('disabled');
- expect(trace.deepEngagement?.status).toBe('disabled');
+ expect(trace.interactionAdaptation?.status).toBe('observed');
+ expect(trace.deepEngagement?.status).not.toBe('out_of_scope');
  expect(trace.stages.some(stage=>stage.name==='room_plates')).toBe(true);
  expect(char.roomPlatesInjection).toBe('无需向量配置的常驻门牌');
  expect(trace.outcome).toBe('skipped_embedding_unconfigured');

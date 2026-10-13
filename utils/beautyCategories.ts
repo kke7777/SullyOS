@@ -1,6 +1,6 @@
 import type { DecorationPreset } from './chatDecoration';
-export const BEAUTY_CATEGORIES = [['all', '全部'], ['appearance', '桌面主题'], ['chat', '全部聊天'], ['whitebox', '白框'], ['bubbles', '气泡'], ['avatar', '头像框'], ['background', '聊天背景'], ['sound', '提示音'], ['date', '见面界面'], ['story', '剧情界面'], ['schedule', '日程表'], ['journal', '交换日记']] as const;
-export type BeautyCategory = typeof BEAUTY_CATEGORIES[number][0] | 'psyche';
+export const BEAUTY_CATEGORIES = [['all', '全部'], ['appearance', '桌面主题'], ['chat', '全部聊天'], ['whitebox', '白框'], ['bubbles', '气泡'], ['avatar', '头像框'], ['background', '聊天背景'], ['psyche', '心象'], ['sound', '提示音'], ['date', '见面界面'], ['story', '剧情界面'], ['schedule', '日程表'], ['journal', '交换日记']] as const;
+export type BeautyCategory = typeof BEAUTY_CATEGORIES[number][0];
 /** Classify structured content only. Never try to split or infer the scope of arbitrary CSS. */
 export function decorationCategories(preset: DecorationPreset): BeautyCategory[] {
   const p = preset.parts; if(p.date)return ['date']; if(p.story)return ['story']; if(p.schedule||p.journal)return [...(p.schedule?['schedule' as const]:[]),...(p.journal?['journal' as const]:[])]; const categories: BeautyCategory[] = ['chat'];
