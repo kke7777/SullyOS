@@ -1,64 +1,14 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useOS } from '../../context/OSContext';
 import Modal from './Modal';
-import { resolveStatusBarMode } from '../../utils/iosStandalone';
 import { NETWORK_SELF_CHECK_STEPS } from '../../utils/networkFailureDiagnosis';
 
-// TypeScript definition for Web Battery API
-interface BatteryManager extends EventTarget {
-  level: number;
-  charging: boolean;
-  addEventListener(type: string, listener: (event: Event) => void): void;
-  removeEventListener(type: string, listener: (event: Event) => void): void;
-}
-
-interface NavigatorWithBattery extends Navigator {
-  getBattery?: () => Promise<BatteryManager>;
-}
-
+// Top time/battery indicators are omitted for this layout. Keep diagnostics
+// independent; the OS clock and AI time-awareness are owned by OSContext.
 const StatusBar: React.FC = () => {
-  const { virtualTime, theme, systemLogs, clearLogs } = useOS();
-  const [batteryLevel, setBatteryLevel] = useState<number>(100);
-  const [isCharging, setIsCharging] = useState<boolean>(false);
+  const { systemLogs, clearLogs } = useOS();
   const [showLogModal, setShowLogModal] = useState(false);
-  
-  // Format numbers to have leading zeros
-  const format = (n: number) => n.toString().padStart(2, '0');
-
-  // Use content color from theme
-  const textColor = theme.contentColor || '#ffffff';
-  const acnh = theme.skin === 'animalcrossing'; // 动森彩蛋：电量条用叶绿色
-
-  useEffect(() => {
-    const initBattery = async () => {
-      const nav = navigator as NavigatorWithBattery;
-      if (nav.getBattery) {
-        try {
-          const battery = await nav.getBattery();
-          
-          const updateBattery = () => {
-            setBatteryLevel(Math.round(battery.level * 100));
-            setIsCharging(battery.charging);
-          };
-
-          updateBattery();
-          
-          battery.addEventListener('levelchange', updateBattery);
-          battery.addEventListener('chargingchange', updateBattery);
-
-          return () => {
-            battery.removeEventListener('levelchange', updateBattery);
-            battery.removeEventListener('chargingchange', updateBattery);
-          };
-        } catch (e) {
-          console.error("Battery API failed", e);
-        }
-      }
-    };
-
-    initBattery();
-  }, []);
 
   const hasError = systemLogs.length > 0;
   const hasIndexedDbBackingStoreError = systemLogs.some(log => {
@@ -69,58 +19,9 @@ const StatusBar: React.FC = () => {
   // 所以顺手把自查顺序摆在终端里，省得每次都要去群里问。
   const hasNetworkFailure = systemLogs.some(log => log.type === 'network' && log.source === 'Network');
 
-  // 三档状态栏布局；旧版 hideStatusBar 存档仍可解析。错误指示器与本设置无关，始终独立渲染。
-  const statusBarMode = resolveStatusBarMode(theme.statusBarMode, theme.hideStatusBar);
-  const hideOsStatusBar = statusBarMode === 'hidden';
-  const compactStatusBar = statusBarMode === 'compact';
-
   return (
     <>
-      {/* safe-area-B 解法：iOS 全屏 PWA 下系统状态栏（真实时间/电量）删不掉，隐掉 SullyOS 自己这条避免双显。
-         非 iOS standalone（安卓/桌面浏览器无系统状态栏）仍渲染，作为虚拟手机自己的状态栏。 */}
-      {!hideOsStatusBar && (
-      <div
-          className="w-full flex justify-between items-start px-6 text-[11px] font-bold z-50 absolute top-0 left-0 bg-transparent transition-colors duration-500 select-none pointer-events-none"
-          style={{
-              color: textColor,
-              // 紧凑档把状态信息放进硬件安全区左右两侧；内容仍从 --chrome-top 开始，
-              // 不会把返回键/标题顶进刘海或灵动岛，同时少掉 standard 的额外 1.5rem。
-              paddingTop: compactStatusBar ? '4px' : 'max(4px, var(--safe-top))',
-              height: 'auto',
-              minHeight: compactStatusBar ? 'max(var(--safe-top), 1.5rem)' : '2rem'
-          }}
-      >
-        <div className="w-1/3 pl-2 flex items-center gap-2 pointer-events-auto">
-          <span>{format(virtualTime.hours)}:{format(virtualTime.minutes)}</span>
-        </div>
-        <div className="w-1/3 flex justify-center">
-          {/* Notch Area spacer */}
-        </div>
-        <div className="w-1/3 flex justify-end gap-1.5 items-center pr-2">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M1.371 8.143c5.858-5.857 15.356-5.857 21.213 0a.75.75 0 0 1 0 1.061l-.53.53a.75.75 0 0 1-1.06 0c-4.98-4.979-13.053-4.979-18.032 0a.75.75 0 0 1-1.06 0l-.53-.53a.75.75 0 0 1 0-1.06Zm3.182 3.182c4.1-4.1 10.749-4.1 14.85 0a.75.75 0 0 1 0 1.061l-.53.53a.75.75 0 0 1-1.062 0 8.25 8.25 0 0 0-11.667 0 .75.75 0 0 1-1.06 0l-.53-.53a.75.75 0 0 1 0-1.06Zm3.204 3.182a6 6 0 0 1 8.486 0 .75.75 0 0 1 0 1.061l-.53.53a.75.75 0 0 1-1.061 0 3.75 3.75 0 0 0-5.304 0 .75.75 0 0 1-1.06 0l-.53-.53a.75.75 0 0 1 0-1.06Zm3.182 3.182a1.5 1.5 0 0 1 2.122 0 .75.75 0 0 1 0 1.061l-.53.53a.75.75 0 0 1-1.061 0l-.53-.53a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-          </svg>
-          <div className="flex items-center gap-1">
-            <span>{batteryLevel}%</span>
-            <div className="w-5 h-2.5 border border-current rounded-[3px] p-[1px] relative opacity-80 flex items-center">
-              <div
-                  className={`h-full rounded-[1px] ${isCharging ? 'bg-green-400' : acnh ? 'bg-[#7cba4c]' : 'bg-current'}`}
-                  style={{ width: `${batteryLevel}%` }}
-              ></div>
-              {isCharging && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-black">
-                          <path d="M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" />
-                      </svg>
-                  </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-      )}
-
-      {/* Independent Error Indicator - Floating below status bar */}
+      {/* Independent Error Indicator */}
       {hasError && (
           <button 
               onClick={() => setShowLogModal(true)} 

@@ -1031,8 +1031,7 @@ const PhoneShell: React.FC = () => {
             </AppErrorBoundary>
           </div>
 
-          {/* Overlays: Status Bar (Top) —— 常驻渲染：时钟/电量条由开关+平台默认决定显隐（StatusBar 内部 isStatusBarHidden），
-              错误指示器、系统调试终端与开关无关、始终在。 */}
+          {/* 顶部时间/电量已隐藏；保留独立错误指示器和系统调试终端。 */}
           <StatusBar />
           
           {/* 通话条跟随安全区和状态栏高度，避免被灵动岛遮挡；无安全区时保留原来的顶部间距。 */}
