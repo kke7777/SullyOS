@@ -257,11 +257,13 @@ const AppGridPage = React.memo(({
     openApp,
     acnh = false,
     editing = false,
+    totalUnread = 0,
 }: {
     apps: typeof INSTALLED_APPS,
     openApp: (id: AppID) => void,
     acnh?: boolean,
     editing?: boolean,
+    totalUnread?: number,
 }) => {
     return (
         <div className={`grid place-items-center animate-fade-in relative ${acnh ? 'grid-cols-4 gap-y-6 gap-x-2' : 'grid-cols-4 gap-y-6 gap-x-2'}`}>
@@ -276,27 +278,20 @@ const AppGridPage = React.memo(({
                         app={app}
                         onClick={() => { if (!editing) openApp(app.id); }}
                         size="md"
+                        variant={DOCK_APPS.includes(app.id) ? 'dock' : 'default'}
                      />
+                     {app.id === AppID.Chat && totalUnread > 0 && (
+                         <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-[9px] flex items-center justify-center border-2 border-white/20 shadow-sm font-bold pointer-events-none animate-pop-in">
+                             {totalUnread > 9 ? '9+' : totalUnread}
+                         </div>
+                     )}
                  </div>
              ))}
         </div>
     );
 });
 
-// 3b. Small 2x2 app grid for pinwheel cells
-const AppQuadGrid = React.memo(({ apps, openApp, editing = false }: { apps: typeof INSTALLED_APPS, openApp: (id: AppID) => void, editing?: boolean }) => {
-    return (
-        <div className="w-full h-full grid grid-cols-2 grid-rows-2 place-items-center gap-x-2 gap-y-3">
-            {apps.map(app => (
-                <div key={app.id} data-launcher-item={app.id} data-launcher-kind="app" className={`relative transition-transform duration-200 active:scale-95 ${editing ? 'launcher-edit-item' : ''}`}>
-                    <AppIcon app={app} onClick={() => { if (!editing) openApp(app.id); }} />
-                </div>
-            ))}
-        </div>
-    );
-});
-
-// 3c. Square image slot for pinwheel (bottom-right)
+// 3b. Square image slot on the retained-widget page
 const DesktopSquareImage = React.memo(({ image, contentColor, onClick, acnh = false }: {
     image?: string,
     contentColor: string,
@@ -528,9 +523,8 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
   useEffect(() => subscribeDevDebugAvailability(setDevDebugVisible), []);
   const availableGridApps = useMemo(() => {
     return INSTALLED_APPS.filter(app =>
-      !DOCK_APPS.includes(app.id)
       // 「捏脸·开发」仅在开发模式（右下角开发徽标可见或手动解锁时）显示
-      && (app.id !== AppID.CharCreatorDev || devDebugVisible)
+      (app.id !== AppID.CharCreatorDev || devDebugVisible)
     );
   }, [devDebugVisible]);
 
@@ -540,15 +534,16 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
   }, []);
 
   const availableGridIds = useMemo(() => availableGridApps.map(app => app.id), [availableGridApps]);
-  const [launcherAppOrder, setLauncherAppOrder] = useState<string[]>(() => normalizeOrder(theme.launcherAppOrder, INSTALLED_APPS.filter(app => !DOCK_APPS.includes(app.id)).map(app => app.id)));
-  const [launcherDockOrder, setLauncherDockOrder] = useState<string[]>(() => normalizeOrder(theme.launcherDockOrder, DOCK_APPS));
+  const [launcherAppOrder, setLauncherAppOrder] = useState<string[]>(() => normalizeOrder([
+      ...(theme.launcherAppOrder || availableGridIds.filter(id => !DOCK_APPS.includes(id))),
+      ...(theme.launcherDockOrder || DOCK_APPS),
+  ], availableGridIds));
   const [pinwheelOrder, setPinwheelOrder] = useState<Array<'music' | 'appsA' | 'appsB' | 'image'>>(() => {
       const available = ['music', 'appsA', 'appsB', 'image'] as const;
       const saved = theme.launcherPinwheelOrder || [];
       return [...saved.filter((id, index) => available.includes(id) && saved.indexOf(id) === index), ...available.filter(id => !saved.includes(id))];
   });
   const launcherAppOrderRef = useRef(launcherAppOrder);
-  const launcherDockOrderRef = useRef(launcherDockOrder);
   const pinwheelOrderRef = useRef(pinwheelOrder);
 
   useEffect(() => {
@@ -559,14 +554,7 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
       });
   }, [availableGridIds, normalizeOrder, theme.launcherAppOrder]);
   useEffect(() => { launcherAppOrderRef.current = launcherAppOrder; }, [launcherAppOrder]);
-  useEffect(() => { launcherDockOrderRef.current = launcherDockOrder; }, [launcherDockOrder]);
   useEffect(() => { pinwheelOrderRef.current = pinwheelOrder; }, [pinwheelOrder]);
-  useEffect(() => {
-      if (layoutEditing) return;
-      const next = normalizeOrder(theme.launcherDockOrder, DOCK_APPS);
-      launcherDockOrderRef.current = next;
-      setLauncherDockOrder(next);
-  }, [layoutEditing, normalizeOrder, theme.launcherDockOrder]);
   useEffect(() => {
       if (layoutEditing) return;
       const available = ['music', 'appsA', 'appsB', 'image'] as const;
@@ -581,31 +569,21 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
       return launcherAppOrder.map(id => byId.get(id as AppID)).filter(Boolean) as typeof INSTALLED_APPS;
   }, [availableGridApps, launcherAppOrder]);
 
-  const dockAppsConfig = useMemo(() => {
-      const byId = new Map(INSTALLED_APPS.map(app => [app.id, app]));
-      return launcherDockOrder.map(id => byId.get(id as AppID)).filter(Boolean) as typeof INSTALLED_APPS;
-  }, [launcherDockOrder]);
-
-  // Split apps into pages of 8 (4 cols x 2 rows fit comfortably below widget)
-  // Pages: 0 = clock+chat+music+grid (original), 1 = pinwheel, 2 = widget images + grid,
-  //        3+ = plain grid. Pad to at least 3 slots so the pinwheel/widget pages always exist.
+  // Cover first, then two-row app pages. Keep the schedule on its own page.
+  // Legacy dock IDs join the app order above without changing their icon rendering.
   const APPS_PER_PAGE = 8;
   const appPages = useMemo(() => {
+      const apps = gridApps.filter(app => app.id !== AppID.Schedule);
       const pages: typeof INSTALLED_APPS[] = [];
-      for (let i = 0; i < gridApps.length; i += APPS_PER_PAGE) {
-          pages.push(gridApps.slice(i, i + APPS_PER_PAGE));
+      for (let i = 0; i < apps.length; i += APPS_PER_PAGE) {
+          pages.push(apps.slice(i, i + APPS_PER_PAGE));
       }
-      while (pages.length < 3) pages.push([]);
       return pages;
   }, [gridApps]);
+  const scheduleApp = INSTALLED_APPS.find(app => app.id === AppID.Schedule);
 
-  // Page 2 (pinwheel) uses appPages[1]: split into two 2x2 quads
-  const page2Apps = appPages[1] || [];
-  const page2QuadA = useMemo(() => page2Apps.slice(0, 4), [page2Apps]);
-  const page2QuadB = useMemo(() => page2Apps.slice(4, 8), [page2Apps]);
-
-  // Total pages = App Pages + 1 Widget Page
-  const totalPages = appPages.length + 1;
+  // Cover + app pages + schedule + retained widgets + calendar.
+  const totalPages = appPages.length + 4;
 
   useEffect(() => { activePageIndexRef.current = activePageIndex; }, [activePageIndex]);
 
@@ -647,7 +625,7 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
       return () => { cancelled = true; };
   }, [activeCharacterId, lastMsgTimestamp, isDataLoaded, characters]); // Trigger on characters change
 
-  // Schedule widget data loading (shown below SpecialMoments icon)
+  // Schedule widget data loading for the dedicated schedule page
   const scheduleChar = useMemo(() => {
       if (!characters || characters.length === 0) return null;
       if (scheduleCharId) return characters.find(c => c.id === scheduleCharId) || characters[0];
@@ -678,6 +656,16 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
       observer.observe(el);
       return () => { observer.disconnect(); cancelAnimationFrame(frame); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useLayoutEffect(() => {
+      const index = Math.max(0, Math.min(totalPages - 1, activePageIndexRef.current));
+      if (index === activePageIndexRef.current) return;
+      activePageIndexRef.current = index;
+      _lastPageIndex = index;
+      setActivePageIndex(index);
+      const el = scrollContainerRef.current;
+      if (el) el.scrollLeft = el.clientWidth * index;
+  }, [totalPages]);
 
   const handleScroll = () => {
       if (scrollContainerRef.current) {
@@ -730,7 +718,9 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
   };
 
   const handleClickCapture = (e: React.MouseEvent) => {
-      if (dragMoved.current > 5 || Date.now() < suppressLayoutClickUntil.current) {
+      const target = e.target as HTMLElement;
+      const editingItem = layoutEditing && target.closest('[data-launcher-item]') && !target.closest('[data-launcher-control]');
+      if (editingItem || dragMoved.current > 5 || Date.now() < suppressLayoutClickUntil.current) {
           e.stopPropagation();
           e.preventDefault();
       }
@@ -751,10 +741,6 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
           const next = reorder(launcherAppOrderRef.current);
           launcherAppOrderRef.current = next;
           setLauncherAppOrder(next);
-      } else if (kind === 'dock') {
-          const next = reorder(launcherDockOrderRef.current);
-          launcherDockOrderRef.current = next;
-          setLauncherDockOrder(next);
       } else if (kind === 'widget') {
           const next = reorder(pinwheelOrderRef.current) as Array<'music' | 'appsA' | 'appsB' | 'image'>;
           pinwheelOrderRef.current = next;
@@ -813,8 +799,7 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
               clearLayoutPageTurn();
               return;
           }
-          const maxAppPage = Math.max(0, appPages.length - 1);
-          const nextPage = Math.max(0, Math.min(maxAppPage, activePageIndexRef.current + direction));
+          const nextPage = Math.max(1, Math.min(appPages.length, activePageIndexRef.current + direction));
           if (nextPage === activePageIndexRef.current) {
               clearLayoutPageTurn();
               return;
@@ -916,7 +901,6 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
           if (pointer.lastTarget) reorderByTarget(pointer.kind, pointer.key, pointer.lastTarget);
           void updateTheme({
               launcherAppOrder: launcherAppOrderRef.current,
-              launcherDockOrder: launcherDockOrderRef.current,
               launcherPinwheelOrder: pinwheelOrderRef.current,
           });
       }
@@ -929,10 +913,9 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
   };
 
   const contentColor = theme.contentColor || '#ffffff';
-  const acnh = theme.skin === 'animalcrossing'; // 动森彩蛋：Dock 换奶油木质底
+  const acnh = theme.skin === 'animalcrossing';
   const paper = theme.skin !== 'animalcrossing' && theme.skin !== 'mobilegame' && theme.skin !== 'tamagotchi' && isPaperWallpaper(theme.wallpaper);
-  // 已迁移 App 外壳已收回到可见 viewport 底边，dock 仅需自留视觉间距，无需再 + safe-bottom
-  // （否则会比 home 条上方多让 34px，dock 看起来悬空）。
+  // 外壳已收回到可见 viewport；只为分页圆点留视觉间距，不重复叠加安全区。
   const launcherBottomInset = '1.25rem';
   
   const totalUnread = Object.values(unreadMessages).reduce((a, b) => a + b, 0);
@@ -979,9 +962,11 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
           padding-top: max(3rem, calc(var(--chrome-top, 24px) + 12px));
           padding-left: max(1.5rem, env(safe-area-inset-left));
           padding-right: max(1.5rem, env(safe-area-inset-right));
+          padding-bottom: calc(1.25rem + 2.5rem);
         }
         .launcher-page > * { flex-shrink: 0; }
-        .launcher-pinwheel-content { flex: 0 0 auto; margin-block: auto; }
+        .launcher-bottom-content { margin-top: auto; padding-top: 1.5rem; }
+        .launcher-pinwheel-content { flex: 0 0 auto; }
         .launcher-editing .launcher-page { padding-top: max(5rem, calc(var(--safe-top, 0px) + 4rem)); }
         .launcher-widget-remove {
           position: absolute; top: 0; right: 0; z-index: 30;
@@ -1060,141 +1045,128 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
             WebkitOverflowScrolling: 'touch',
         }}
       >
-          {/* Render App Pages */}
+          {/* First page: wallpaper space and the unchanged clock at the bottom. */}
+          <div className="launcher-page launcher-cover-page w-full flex-shrink-0 snap-center snap-always flex flex-col h-full">
+              <div className="launcher-bottom-content">
+                  <DesktopClock />
+              </div>
+          </div>
+
           {appPages.map((pageApps, idx) => (
               <div
-                key={idx}
-                className="launcher-page w-full flex-shrink-0 snap-center snap-always flex flex-col px-6 pt-12 pb-8 h-full"
+                key={`apps-${idx}`}
+                className="launcher-page launcher-app-page w-full flex-shrink-0 snap-center snap-always flex flex-col h-full"
                 style={{ contentVisibility: 'auto', contain: 'layout paint', transform: 'translateZ(0)' }}
               >
-                  {idx === 0 ? (
-                      // Page 1 (original): Clock + Chat + 4x2 App Grid
-                      <>
-                        <DesktopClock />
-                        <CharacterWidget
-                            char={widgetChar}
-                            unreadCount={widgetUnread}
-                            lastMessage={lastMessage}
-                            onClick={() => openApp(AppID.Chat)}
-                            contentColor={contentColor}
-                            paper={paper}
-                        />
-                        <div className="flex-1">
-                            <AppGridPage apps={pageApps} openApp={openApp} acnh={acnh} editing={layoutEditing} />
-                        </div>
-                      </>
-                  ) : idx === 1 ? (
-                      // Page 2: Schedule 4x2 widget on top + Pinwheel (Music / 2x2 icons / 2x2 icons / Image) below
-                      <div className="launcher-pinwheel-content w-full flex flex-col gap-5">
-                          {scheduleChar && (
-                              <ScheduleHomeWidget
-                                  schedule={scheduleData}
-                                  character={scheduleChar}
-                                  contentColor={contentColor}
-                                  onOpen={() => { setScheduleViewerOpen(true); trackEvent('打开角色日程面板'); }}
-                                  acnh={acnh}
-                                  paper={paper}
-                              />
-                          )}
-                          <div className="launcher-pinwheel-grid grid grid-cols-2 gap-x-3 gap-y-5 w-full">
-                              {pinwheelOrder.filter(cell => cell === 'music' ? theme.launcherMusicVisible !== false : cell === 'image' ? theme.launcherImageVisible !== false : true).map(cell => (
-                                  <div
-                                      key={cell}
-                                      data-launcher-item={cell}
-                                      data-launcher-kind="widget"
-                                      className={`relative aspect-square min-w-0 ${layoutEditing ? 'launcher-edit-item' : ''}`}
-                                  >
-                                      {layoutEditing && (cell === 'music' || cell === 'image') && (
-                                          <button type="button" data-launcher-control className="launcher-widget-remove"
-                                              aria-label={cell === 'music' ? '删除音乐组件' : '删除图片组件'}
-                                              onClick={e => {
-                                                  e.stopPropagation();
-                                                  updateTheme(cell === 'music' ? { launcherMusicVisible: false } : { launcherImageVisible: false });
-                                              }}>删除</button>
-                                      )}
-                                      {cell === 'music' ? (
-                                          <NowPlayingSquareWidget contentColor={contentColor} />
-                                      ) : cell === 'appsA' ? (
-                                          <AppQuadGrid apps={page2QuadA} openApp={openApp} editing={layoutEditing} />
-                                      ) : cell === 'appsB' ? (
-                                          <AppQuadGrid apps={page2QuadB} openApp={openApp} editing={layoutEditing} />
-                                      ) : (
-                                          <DesktopSquareImage
-                                              image={theme.launcherWidgets?.['dsq']}
-                                              contentColor={contentColor}
-                                              onClick={() => { if (!layoutEditing) openApp(AppID.Appearance); }}
-                                              acnh={acnh}
-                                          />
-                                      )}
-                                  </div>
-                              ))}
-                          </div>
-                      </div>
-                  ) : (
-                      // Page 3+: Widget Images (idx===2 only) + Free Decorations + Apps
-                      <div className="pt-10 flex-1 flex flex-col relative">
-                          {idx === 2 && (() => {
-                            const raw = theme.launcherWidgets || {};
-                            const w = { ...raw };
-                            const hasAny = w['tl'] || w['tr'] || w['wide'];
-                            const hasTopRow = w['tl'] || w['tr'];
-                            return (
-                              <>
-                                {hasAny && (
-                                  <div className="mb-3 space-y-2 relative z-10">
-                                    {hasTopRow && (
-                                      <div className="flex gap-2">
-                                        {['tl', 'tr'].map(key => w[key] ? (
-                                          <div key={key} className="flex-1 aspect-square rounded-2xl overflow-hidden shadow-md border border-white/20">
-                                            <TokenImg value={w[key]} className="w-full h-full object-cover" alt="" loading="lazy" />
-                                          </div>
-                                        ) : <div key={key} className="flex-1"></div>)}
-                                      </div>
-                                    )}
-                                    {w['wide'] && (
-                                      <div className="w-full h-32 rounded-2xl overflow-hidden shadow-md border border-white/20">
-                                        <TokenImg value={w['wide']} className="w-full h-full object-cover" alt="" loading="lazy" />
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {/* Free-positioned Desktop Decorations (z-20 to float above widgets z-10) */}
-                                {theme.desktopDecorations && theme.desktopDecorations.length > 0 && (
-                                  <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
-                                    {theme.desktopDecorations.map(deco => (
-                                      <img
-                                        key={deco.id}
-                                        src={deco.content}
-                                        alt=""
-                                        loading="lazy"
-                                        className="absolute w-16 h-16 object-contain select-none"
-                                        style={{
-                                          left: `${deco.x}%`,
-                                          top: `${deco.y}%`,
-                                          transform: `translate(-50%, -50%) scale(${deco.scale}) rotate(${deco.rotation}deg)${deco.flip ? ' scaleX(-1)' : ''}`,
-                                          opacity: deco.opacity,
-                                          zIndex: deco.zIndex,
-                                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))',
-                                        }}
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
-
-                          <AppGridPage
-                                apps={pageApps}
-                                openApp={openApp}
-                                acnh={acnh}
-                                editing={layoutEditing}
-                          />
-                          <div className="flex-1"></div>
-                      </div>
-                  )}
+                  <div className="launcher-bottom-content">
+                      {idx === 0 && <CharacterWidget
+                          char={widgetChar}
+                          unreadCount={widgetUnread}
+                          lastMessage={lastMessage}
+                          onClick={() => { if (!layoutEditing) openApp(AppID.Chat); }}
+                          contentColor={contentColor}
+                          paper={paper}
+                      />}
+                      <AppGridPage apps={pageApps} openApp={openApp} acnh={acnh} editing={layoutEditing} totalUnread={totalUnread} />
+                  </div>
               </div>
           ))}
+
+          {/* Schedule has a dedicated bottom-aligned page, with its existing card and app icon. */}
+          <div className="launcher-page launcher-schedule-page w-full flex-shrink-0 snap-center snap-always flex flex-col h-full">
+              <div className="launcher-bottom-content flex flex-col gap-5">
+                  {scheduleChar && <ScheduleHomeWidget
+                      schedule={scheduleData}
+                      character={scheduleChar}
+                      contentColor={contentColor}
+                      onOpen={() => { if (!layoutEditing) { setScheduleViewerOpen(true); trackEvent('打开角色日程面板'); } }}
+                      acnh={acnh}
+                      paper={paper}
+                  />}
+                  {scheduleApp && <div className="self-start">
+                      <AppIcon app={scheduleApp} onClick={() => { if (!layoutEditing) openApp(AppID.Schedule); }} size="md" />
+                  </div>}
+              </div>
+          </div>
+
+          {/* Retain music, custom images and decorations without crowding the app rows. */}
+          <div className="launcher-page launcher-widgets-page w-full flex-shrink-0 snap-center snap-always flex flex-col h-full">
+              <div className="launcher-bottom-content launcher-pinwheel-content w-full flex flex-col gap-5 relative">
+                  <div className="launcher-pinwheel-grid grid grid-cols-2 gap-x-3 gap-y-5 w-full">
+                      {pinwheelOrder.filter(cell => cell === 'music' ? theme.launcherMusicVisible !== false : cell === 'image' ? theme.launcherImageVisible !== false : false).map(cell => (
+                          <div
+                              key={cell}
+                              data-launcher-item={cell}
+                              data-launcher-kind="widget"
+                              className={`relative aspect-square min-w-0 ${layoutEditing ? 'launcher-edit-item' : ''}`}
+                          >
+                              {layoutEditing && <button type="button" data-launcher-control className="launcher-widget-remove"
+                                  aria-label={cell === 'music' ? '删除音乐组件' : '删除图片组件'}
+                                  onClick={e => {
+                                      e.stopPropagation();
+                                      updateTheme(cell === 'music' ? { launcherMusicVisible: false } : { launcherImageVisible: false });
+                                  }}>删除</button>}
+                              {cell === 'music' ? <NowPlayingSquareWidget contentColor={contentColor} /> : <DesktopSquareImage
+                                  image={theme.launcherWidgets?.['dsq']}
+                                  contentColor={contentColor}
+                                  onClick={() => { if (!layoutEditing) openApp(AppID.Appearance); }}
+                                  acnh={acnh}
+                              />}
+                          </div>
+                      ))}
+                  </div>
+                  {(() => {
+                    const raw = theme.launcherWidgets || {};
+                    const w = { ...raw };
+                    const hasAny = w['tl'] || w['tr'] || w['wide'];
+                    const hasTopRow = w['tl'] || w['tr'];
+                    return (
+                      <>
+                        {hasAny && (
+                          <div className="mb-3 space-y-2 relative z-10">
+                            {hasTopRow && (
+                              <div className="flex gap-2">
+                                {['tl', 'tr'].map(key => w[key] ? (
+                                  <div key={key} className="flex-1 aspect-square rounded-2xl overflow-hidden shadow-md border border-white/20">
+                                    <TokenImg value={w[key]} className="w-full h-full object-cover" alt="" loading="lazy" />
+                                  </div>
+                                ) : <div key={key} className="flex-1"></div>)}
+                              </div>
+                            )}
+                            {w['wide'] && (
+                              <div className="w-full h-32 rounded-2xl overflow-hidden shadow-md border border-white/20">
+                                <TokenImg value={w['wide']} className="w-full h-full object-cover" alt="" loading="lazy" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* Free-positioned Desktop Decorations (z-20 to float above widgets z-10) */}
+                        {theme.desktopDecorations && theme.desktopDecorations.length > 0 && (
+                          <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
+                            {theme.desktopDecorations.map(deco => (
+                              <img
+                                key={deco.id}
+                                src={deco.content}
+                                alt=""
+                                loading="lazy"
+                                className="absolute w-16 h-16 object-contain select-none"
+                                style={{
+                                  left: `${deco.x}%`,
+                                  top: `${deco.y}%`,
+                                  transform: `translate(-50%, -50%) scale(${deco.scale}) rotate(${deco.rotation}deg)${deco.flip ? ' scaleX(-1)' : ''}`,
+                                  opacity: deco.opacity,
+                                  zIndex: deco.zIndex,
+                                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))',
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+              </div>
+          </div>
 
           {/* Final Page: Widgets */}
           <WidgetsPage
@@ -1211,7 +1183,7 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
       {/* Page Indicators */}
       <div
           className="absolute left-0 w-full flex justify-center gap-1 pointer-events-none z-20"
-          style={{ bottom: `calc(${launcherBottomInset} + 5.5rem)` }}
+          style={{ bottom: launcherBottomInset }}
           aria-hidden="true"
       >
           {Array.from({ length: totalPages }).map((_, i) => (
@@ -1224,32 +1196,6 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
                   />
               </div>
           ))}
-      </div>
-
-      {/* Floating Dock - Updated Margin and Safe Area handling */}
-      <div
-           className="mt-auto flex justify-center w-full px-4 relative z-30"
-           style={{ paddingBottom: launcherBottomInset }}
-      >
-           <div
-             className={`rounded-[1.75rem] px-4 py-3 flex gap-3 sm:gap-6 items-center mx-auto max-w-full justify-between overflow-x-auto no-scrollbar transform-gpu ${acnh || paper ? '' : 'bg-white/30 border border-white/25 shadow-[0_8px_40px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.08)]'}`}
-             style={acnh ? { background: 'transparent' } : paper ? {
-               background: 'rgba(224,221,215,0.42)',
-               border: '1px solid rgba(91,72,51,0.07)',
-               boxShadow: '0 6px 18px rgba(91,72,51,0.065)',
-             } : undefined}
-           >
-               {dockAppsConfig.map(app => (
-                   <div key={app.id} data-launcher-item={app.id} data-launcher-kind="dock" className={`relative ${layoutEditing ? 'launcher-edit-item' : ''}`}>
-                        <AppIcon app={app} onClick={() => { if (!layoutEditing) openApp(app.id); }} variant="dock" size="md" />
-                        {app.id === 'chat' && totalUnread > 0 && (
-                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-[9px] flex items-center justify-center border-2 border-white/20 shadow-sm font-bold pointer-events-none animate-pop-in">
-                                {totalUnread > 9 ? '9+' : totalUnread}
-                            </div>
-                        )}
-                   </div>
-               ))}
-           </div>
       </div>
 
       <ScheduleFullscreenViewer
