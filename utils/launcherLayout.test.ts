@@ -70,22 +70,30 @@ describe('首页布局与入口迁移', () => {
             expect(page.querySelector('.launcher-bottom-content')).not.toBeNull();
         }
         const actual = [...host.querySelectorAll('[data-launcher-kind="app"]')].map(icon => icon.getAttribute('data-launcher-item'));
-        const expected = INSTALLED_APPS.filter(app => app.id !== AppID.CharCreatorDev && app.id !== AppID.Schedule).map(app => app.id);
+        const expected = INSTALLED_APPS.filter(app => app.id !== AppID.CharCreatorDev).map(app => app.id);
         expect(actual.sort()).toEqual(expected.sort());
-        expect(host.querySelectorAll('.launcher-schedule-page button')).toHaveLength(2);
+        expect(host.querySelectorAll('.launcher-schedule-page button')).toHaveLength(1);
+        expect(host.querySelector('.launcher-schedule-page')?.previousElementSibling).toBe(appPages.at(-1));
+        expect(appPages.at(-1)?.querySelector('[data-launcher-item="schedule"]')).not.toBeNull();
+        for (const app of INSTALLED_APPS.filter(app => app.id !== AppID.CharCreatorDev)) {
+            const icon = host.querySelector('[data-launcher-item="' + app.id + '"]')!;
+            const label = icon.querySelector('button span')!;
+            expect(label.textContent).toBe(app.name);
+            expect(label.classList.contains('hidden')).toBe(false);
+        }
         expect(host.querySelector('.launcher-schedule-page [data-launcher-kind="app"]')).toBeNull();
         const pages = host.querySelector('.launcher-pages')!.children;
         expect(pages).toHaveLength(appPages.length + 4);
         expect(host.querySelector('[aria-hidden="true"].absolute.left-0')!.children).toHaveLength(pages.length);
     });
 
-    it('快捷栏入口移入功能页后，保留图标样式、未读角标和点击目标', async () => {
+    it('快捷栏入口移入功能页后，显示名称并保留自定义图标、未读角标和点击目标', async () => {
         state.os.customIcons = { [AppID.Chat]: 'data:image/png;base64,test' };
         await render();
         for (const id of DOCK_APPS) {
             const icon = host.querySelector(`[data-launcher-item="${id}"]`)!;
             expect(icon.closest('.launcher-app-page')).not.toBeNull();
-            expect(icon.querySelector('button span')?.classList.contains('hidden')).toBe(true);
+            expect(icon.querySelector('button span')?.classList.contains('hidden')).toBe(false);
             await act(async () => (icon.querySelector('button') as HTMLButtonElement).click());
             expect(state.os.openApp).toHaveBeenLastCalledWith(id);
         }
@@ -103,7 +111,7 @@ describe('首页布局与入口迁移', () => {
         expect(viewer).not.toBeNull();
         await act(async () => viewer.click());
         expect(host.querySelector('[data-testid="schedule-viewer"]')).toBeNull();
-        const scheduleIcon = host.querySelector('.launcher-schedule-page button:last-child') as HTMLButtonElement;
+        const scheduleIcon = host.querySelector('[data-launcher-item="schedule"] button') as HTMLButtonElement;
         await act(async () => scheduleIcon.click());
         expect(state.os.openApp).toHaveBeenLastCalledWith(AppID.Schedule);
     });

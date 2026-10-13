@@ -278,7 +278,6 @@ const AppGridPage = React.memo(({
                         app={app}
                         onClick={() => { if (!editing) openApp(app.id); }}
                         size="md"
-                        variant={DOCK_APPS.includes(app.id) ? 'dock' : 'default'}
                      />
                      {app.id === AppID.Chat && totalUnread > 0 && (
                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-[9px] flex items-center justify-center border-2 border-white/20 shadow-sm font-bold pointer-events-none animate-pop-in">
@@ -569,18 +568,19 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
       return launcherAppOrder.map(id => byId.get(id as AppID)).filter(Boolean) as typeof INSTALLED_APPS;
   }, [availableGridApps, launcherAppOrder]);
 
-  // Cover first, then two-row app pages. Keep the schedule on its own page.
-  // Legacy dock IDs join the app order above without changing their icon rendering.
+  // Cover first, then two-row app pages. The schedule widget has its own page.
+  // Every app now shows its name; put the schedule app on the preceding app page.
   const APPS_PER_PAGE = 8;
   const appPages = useMemo(() => {
       const apps = gridApps.filter(app => app.id !== AppID.Schedule);
+      const scheduleApp = gridApps.find(app => app.id === AppID.Schedule);
+      if (scheduleApp) apps.push(scheduleApp);
       const pages: typeof INSTALLED_APPS[] = [];
       for (let i = 0; i < apps.length; i += APPS_PER_PAGE) {
           pages.push(apps.slice(i, i + APPS_PER_PAGE));
       }
       return pages;
   }, [gridApps]);
-  const scheduleApp = INSTALLED_APPS.find(app => app.id === AppID.Schedule);
 
   // Cover + app pages + schedule + retained widgets + calendar.
   const totalPages = appPages.length + 4;
@@ -1072,7 +1072,7 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
               </div>
           ))}
 
-          {/* Schedule has a dedicated bottom-aligned page, with its existing card and app icon. */}
+          {/* Only the unchanged schedule widget belongs on this bottom-aligned page. */}
           <div className="launcher-page launcher-schedule-page w-full flex-shrink-0 snap-center snap-always flex flex-col h-full">
               <div className="launcher-bottom-content flex flex-col gap-5">
                   {scheduleChar && <ScheduleHomeWidget
@@ -1083,9 +1083,6 @@ const Launcher: React.FC<{ staticPreview?: boolean }> = ({ staticPreview = false
                       acnh={acnh}
                       paper={paper}
                   />}
-                  {scheduleApp && <div className="self-start">
-                      <AppIcon app={scheduleApp} onClick={() => { if (!layoutEditing) openApp(AppID.Schedule); }} size="md" />
-                  </div>}
               </div>
           </div>
 
