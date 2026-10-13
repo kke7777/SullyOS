@@ -110,10 +110,11 @@ describe('timelyByWorker —— 时效段交给 worker，前端这份不重复�
     it('ChatApp 格式保留定稿的自然口语与弹性消息长度，置于行为规范最前', async () => {
         const payload = await buildChatRequestPayload({ ...baseInput() });
         const systemPrompt = String(payload.fullMessages[0]?.content || '');
-        const topRule = 'TOP 1｜ChatApp 格式（本节最高优先级）：你正在通过手机聊天，以符合角色性格和双方关系的自然口语回应。每行渲染为一个气泡，气泡之间使用实际换行，不要输出“\\n”字样。';
-        const lengthRule = '消息长短根据当前内容、情绪和表达习惯自然变化。简单回应可以简短；分享、撒娇、害羞、倾诉或认真交流时，可以使用完整的长句或较长气泡。';
-        const onlineRule = '严格注意，无论之前是什么模式，哪怕上一句话你们还面对面在一起，当前，你都是已经处于线上聊天状态了，请不要输出你的行为。';
-        expect(systemPrompt).toContain(`### 聊天 App 行为规范 (Chat App Rules)\n${topRule}\n${lengthRule}\n${onlineRule}\n1. 沉浸感:`);
+        const topRule = '### TOP 1｜ChatApp 格式（本节最高优先级）\n\n你是对方的恋人/妻子，你们因为异地，只能通过手机进行线上聊天，你可以以自然口语回应对方。';
+        const bubbleRule = '回复时，**每行渲染为一个气泡，气泡之间使用实际换行**，不要输出“\\n”字样。';
+        const lengthRule = '**消息长短根据当前内容、情绪和表达习惯自然变化。可以简短，也可以是完整长句。**';
+        const onlineRule = '严格注意，哪怕上一句话你们还面对面在一起，当前，你都是已经处于线上聊天状态了，**请不要输出你的行为。**';
+        expect(systemPrompt).toContain(`### 聊天 App 行为规范 (Chat App Rules)\n\n${topRule}\n\n${bubbleRule}\n\n${lengthRule}\n\n${onlineRule}\n\n### 1. 沉浸感`);
         expect(systemPrompt).toContain('每行渲染为一个气泡；空格和标点不会拆泡');
     });
 
