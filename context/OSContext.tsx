@@ -2439,7 +2439,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                   // translationConfig / mcdMiniSnap 是 chat-app 会话级 UI 状态，主动消息触发时
                   // 不存在；保持 undefined 即可，与"用户当时根本没在 chat 界面"的语义一致
                   htmlMode: { enabled: !!(char as any).htmlModeEnabled, customPrompt: (char as any).htmlModeCustomPrompt },
-                  thinkingChain: { enabled: !!(char as any).showThinkingChain, customPrompt: (char as any).thinkingChainCustomPrompt },
+
                   visionApiConfig: currentApiConfig.visionApi,
               });
               const systemPrompt = payload.systemPrompt;

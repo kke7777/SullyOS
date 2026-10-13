@@ -575,21 +575,8 @@ const processInboxMessageWithPostProcessing = async (
   const messageIndex: number = (message as any).messageIndex
     ?? (message.metadata && (message.metadata as any).messageIndex)
     ?? 0;
-  // 思考链挂在第一条 content push 的 metadata.amsgReasoning 上（太长时挪进 client_state、
-  // 只留 amsgReasoningRef，见 worker/amsg/src/index.ts 的 offloadOversizedPush），
-  // 只在第一条上取，渲染成第一条 assistant message 的 metadata.thinkingChain。
-  // 定时任务那条路 worker 刻意不带思考（prompt 里没有「心象」提示词，原始推理腔当卡片
-  // 是穿帮），所以这里也不会有值——收侧不用另设门。
-  let reasoningContent: string | undefined;
-  if (messageIndex <= 1) {
-    const inlineReasoning = (message.metadata as any)?.amsgReasoning;
-    const metaReasoning = typeof inlineReasoning === 'string' && inlineReasoning
-      ? inlineReasoning
-      : await replyStep(async () => fetchOffloadedReasoning(message, offloadedCleanups));
-    if (typeof metaReasoning === 'string' && metaReasoning.trim()) {
-      reasoningContent = metaReasoning;
-    }
-  }
+  // 兼容旧推送，但不再读取或保存心象内容。
+  const reasoningContent: string | undefined = undefined;
 
   // XHS 工具在 worker 里跑. worker 把 directive 引用到的笔记/xsecToken 随最后一条 push 的
   // metadata.xhsSession 带回来 (稀疏 {idx, note}, idx 1-based, 见 worker/amsg/src/agentic.ts

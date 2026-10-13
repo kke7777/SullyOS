@@ -57,7 +57,7 @@ describe('memory palace M0 trace', () => {
 
         changedSecretOnly.featureFlags.recallRouter = true;
         localStorage.setItem('os_memory_palace_config', JSON.stringify(changedSecretOnly));
-        expect(readRecallRuntimeSnapshot().configSnapshotHash).not.toBe(first.configSnapshotHash);
+        expect(readRecallRuntimeSnapshot().configSnapshotHash).toBe(first.configSnapshotHash);
     });
 
     it('keeps master injection behavior when every smart-context flag is off', async () => {
@@ -126,7 +126,7 @@ describe('memory palace M0 trace', () => {
         expect(char.memoryPalaceInjection).toBe('上一轮召回');
     });
 
-    it('uses the new clear-first behavior only after smart context is enabled', async () => {
+    it('ignores obsolete enabled flags and retains legacy recall behavior', async () => {
         localStorage.setItem('os_memory_palace_config', JSON.stringify({
             featureFlags: { recallRouter: true },
         }));
@@ -139,11 +139,11 @@ describe('memory palace M0 trace', () => {
 
         const trace = await injectMemoryPalace(char, [], undefined, undefined, { entryPoint: 'chat_app' });
 
-        expect(char.memoryPalaceInjection).toBe('');
-        expect(char.roomPlatesInjection).toBe('');
-        expect(trace.injection.clearedPreviousMemory).toBe(true);
-        expect(trace.injection.clearedPreviousRoomPlates).toBe(true);
-        expect(trace.stages.some(stage => stage.name === 'clear_previous_injection')).toBe(true);
+        expect(char.memoryPalaceInjection).toBe('上一轮召回');
+        expect(char.roomPlatesInjection).toBe('上一轮门牌');
+        expect(trace.injection.clearedPreviousMemory).toBe(false);
+        expect(trace.injection.clearedPreviousRoomPlates).toBe(false);
+        expect(trace.stages.some(stage => stage.name === 'clear_previous_injection')).toBe(false);
     });
 
 });

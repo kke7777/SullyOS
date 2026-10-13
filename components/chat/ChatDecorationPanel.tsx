@@ -1,6 +1,4 @@
 import { useLocalBackHandler } from '../../hooks/useLocalBackHandler';
-import PsycheAppearanceEditor from './PsycheAppearanceEditor';
-import {resolvePsycheAppearance} from '../../utils/psycheAppearance';
 import React, {useState} from 'react';
 import { startBeautyUsage, decorationSourceKey } from '../../utils/beautyUsage';
 import {createPortal} from 'react-dom';
@@ -15,8 +13,8 @@ import ChatDecorationPresets from './ChatDecorationPresets';
 import {exportDecoration,decorationPatches,resolveDecorationTheme,decorationCssPatch} from '../../utils/chatDecoration';
 import {useBlobRefUrl,putImageBlob} from '../../utils/blobRef';
 
-export type DecorationTab = 'library'|'layout'|'bubbles'|'background'|'sound'|'css'|'presets'|'psyche';
-const tabs: {id:DecorationTab;name:string}[] = [{id:'layout',name:'布局'},{id:'bubbles',name:'气泡'},{id:'background',name:'背景'},{id:'psyche',name:'心象'},{id:'sound',name:'声音'},{id:'css',name:'白框'},{id:'presets',name:'预设'}];
+export type DecorationTab = 'library'|'layout'|'bubbles'|'background'|'sound'|'css'|'presets';
+const tabs: {id:DecorationTab;name:string}[] = [{id:'layout',name:'布局'},{id:'bubbles',name:'气泡'},{id:'background',name:'背景'},{id:'sound',name:'声音'},{id:'css',name:'白框'},{id:'presets',name:'预设'}];
 interface Props {
  character: CharacterProfile; theme: OSTheme; themes: ChatTheme[];
  updateCharacter: (patch:Partial<CharacterProfile>)=>void|Promise<void>;
@@ -26,7 +24,7 @@ interface Props {
  onOpenWorkshop:()=>void; onClose:()=>void; initialTab?:DecorationTab;
 }
 export default function ChatDecorationPanel({character:char,theme,themes,updateCharacter,updateTheme,onBgUpload,backgroundUrl,onOpenWorkshop,onClose,onSaveBubble,initialTab='layout'}:Props){
- const [tab,setTab]=useState<DecorationTab>(initialTab);
+ const [tab,setTab]=useState<DecorationTab>(tabs.some(item=>item.id===initialTab)?initialTab:'layout');
  const [scope,setScope]=useState<'character'|'global'>('character');
  const [collapsed,setCollapsed]=useState(false);
  const [presetBusy,setPresetBusy]=useState(false);
@@ -85,7 +83,6 @@ export default function ChatDecorationPanel({character:char,theme,themes,updateC
        <label className="chat-decoration-upload">选择背景图片<input aria-label="选择背景图片" type="file" accept="image/*" onChange={e=>{const f=e.target.files?.[0];if(f){if(global)void putImageBlob(f).then(ref=>updateTheme({chatBackground:ref}));else onBgUpload(f);}e.target.value='';}}/></label>
        {(global?theme.chatBackground:char.chatBackground!==undefined)&&<button className="chat-decoration-link" onClick={()=>global?updateTheme({chatBackground:undefined}):updateCharacter({chatBackground:undefined})}>{global?'移除全局背景图片':'移除专属背景，跟随全局'}</button>}
      </>}
-     {tab==='psyche'&&<> {!global&&<button className="chat-decoration-link" onClick={()=>updateCharacter({thinkingChainStyle:undefined,thinkingChainCustomColors:undefined,thinkingChainCustomCss:undefined})}>跟随全局心象</button>}<PsycheAppearanceEditor appearance={resolvePsycheAppearance(theme,global?undefined:char)} onChange={patch=>{const next={...resolvePsycheAppearance(theme,global?undefined:char),...patch};if(global)void updateTheme({chatPsyche:next});else void updateCharacter({thinkingChainStyle:next.styleId,thinkingChainCustomColors:{bg:'#1f2937',accent:'#fbbf24',text:'#f1f5f9',...next.customColors},thinkingChainCustomCss:next.customCss||''});}}/></>}
      {tab==='sound'&&<>
       <h3>消息提示音</h3>
       <WhiteboxSoundEditor key={scope} sound={sound} bound={bound} showBind={!global} onChangeSound={changeSound} onChangeBound={changeBound} hint={global?'未设置专属提示音的角色会使用这里的声音。':'角色的新回复到达时响一次。不设置则跟随全局提示音。'}/>

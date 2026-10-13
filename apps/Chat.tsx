@@ -4,7 +4,6 @@ import {homePhoneAppearance,HOME_PHONE_BUBBLES} from './room3d/homePhoneAppearan
 
 import { publishReplyDisplay, stopReplyRuns } from '../utils/chatReplyCancellation';
 import { stopInstantChat } from '../utils/amsgInstantChat';
-import {resolvePsycheAppearance} from '../utils/psycheAppearance';
 import { startsNewMessageGroup } from '../utils/chatMessageGrouping';
 import EmojiExportDialog from '../components/chat/EmojiExportDialog';
 import BlobRefStyle from '../components/chat/BlobRefStyle';
@@ -38,7 +37,7 @@ import { isMcdConfigured } from '../utils/mcdMcpClient';
 import { isMcdActivatedInMessages, MCD_ACTIVATE_TRIGGER, MCD_DEACTIVATE_TRIGGER } from '../utils/mcdToolBridge';
 import { isLuckinConfigured } from '../utils/luckinMcpClient';
 import { isLuckinActivatedInMessages, LUCKIN_ACTIVATE_TRIGGER, LUCKIN_DEACTIVATE_TRIGGER } from '../utils/luckinToolBridge';
-import MessageItem, { ThinkingChainBlock } from '../components/chat/MessageItem';
+import MessageItem from '../components/chat/MessageItem';
 import McdMiniApp from '../components/mcd/McdMiniApp';
 import LuckinMiniApp from '../components/luckin/LuckinMiniApp';
 import LuckinLocationModal from '../components/luckin/LuckinLocationModal';
@@ -63,7 +62,6 @@ import Modal from '../components/os/Modal';
 import MemoryContextSelfCheck from '../components/chat/MemoryContextSelfCheck';
 import ProactiveSettingsModal from '../components/chat/ProactiveSettingsModal';
 import ActiveMsg2SettingsModal from '../components/chat/ActiveMsg2SettingsModal';
-import ThinkingChainSettingsModal from '../components/chat/ThinkingChainSettingsModal';
 import ScheduleChangeNotice from '../components/chat/ScheduleChangeNotice';
 import { useChatAI } from '../hooks/useChatAI';
 import { useChatAutoReply } from '../hooks/useChatAutoReply';
@@ -264,12 +262,6 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         resolve?.(convert);
     };
     const [settingsHtmlModeCustomPrompt, setSettingsHtmlModeCustomPrompt] = useState('');
-    const contextSuiteAnyEnabled = memoryPalaceConfig.featureFlags?.recallRouter === true
-        || memoryPalaceConfig.featureFlags?.interactionAdaptation === true
-        || memoryPalaceConfig.featureFlags?.deepEngagement === true;
-    const contextSuiteAllEnabled = memoryPalaceConfig.featureFlags?.recallRouter === true
-        && memoryPalaceConfig.featureFlags?.interactionAdaptation === true
-        && memoryPalaceConfig.featureFlags?.deepEngagement === true;
     const [isVectorizing, setIsVectorizing] = useState(false);
     // 记忆宫殿「一键存入」：打开设置弹窗时算出待处理条数（排除热区的真实口径），处理中显示逐轮进度
     const [vectorizePendingCount, setVectorizePendingCount] = useState<number | null>(null);
@@ -289,7 +281,6 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
     const [archiveProgress, setArchiveProgress] = useState('');
     const [showProactiveModal, setShowProactiveModal] = useState(false);
     const [showActiveMsg2Modal, setShowActiveMsg2Modal] = useState(false);
-    const [showThinkingChainModal, setShowThinkingChainModal] = useState(false);
 
     // Archive Prompts State
     const [archivePrompts, setArchivePrompts] = useState<{id: string, name: string, content: string}[]>(DEFAULT_ARCHIVE_PROMPTS);
@@ -1775,7 +1766,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         if ([
             'transfer', 'archive', 'settings', 'chrome-css', 'chrome-sound', 'fine-tune',
             'meetup', 'proactive', 'active-msg-2', 'schedule', 'mcd-request', 'luckin-request',
-            'html-mode-toggle', 'html-mode-settings', 'thinking-settings', 'favorites', 'collaboration',
+            'html-mode-toggle', 'html-mode-settings', 'favorites', 'collaboration',
             // 独立小功能：点一下就是用了一次，跟「打开某个面板」同一性质。
             // send-emoji / select-category 这些是「挑哪一个」，不进名单。
             'poke', 'emoji-import', 'add-category', 'mcd-end', 'luckin-end',
@@ -1839,12 +1830,6 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                     updateCharacter(char.id, { htmlModeEnabled: true } as any);
                 }
                 setModalType('chat-settings');
-                break;
-            }
-            case 'thinking-settings': {
-                // 「展示思考」按钮 → 打开思考链设置 modal（开关 / 卡片风格 / 配色 / 追加提示词）
-                if (!char) break;
-                setShowThinkingChainModal(true);
                 break;
             }
         }
@@ -2438,23 +2423,6 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         saveChatInputPreferences(settingsInputPreferences);
         setModalType('none');
         addToast('设置已保存', 'success');
-    };
-
-    const handleToggleContextSuite = () => {
-        const enabled = !contextSuiteAnyEnabled;
-        trackEvent('切换智能语境', {
-            状态: enabled ? '开' : '关',
-            此前: contextSuiteAllEnabled ? '全开' : contextSuiteAnyEnabled ? '部分开' : '全关',
-        });
-        updateMemoryPalaceConfig({
-            featureFlags: {
-                ...memoryPalaceConfig.featureFlags,
-                recallRouter: enabled,
-                interactionAdaptation: enabled,
-                deepEngagement: enabled,
-            },
-        });
-        addToast(enabled ? '已开启智能语境' : '已关闭智能语境，回复恢复旧流程', 'success');
     };
 
     const restoreAdaptiveContext = () => {
@@ -3399,12 +3367,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
             return '日程卡美化已保存并启用';
         }
 
-        if (artifact.kind === 'psyche-css') {
-            if (!targetCharacterId) throw new Error('请选择使用心象卡美化的角色');
-            await updateCharacter(targetCharacterId, { thinkingChainCustomCss: String(artifact.payload.css || '') });
-            const target = characters.find(item => item.id === targetCharacterId);
-            return `心象卡美化已应用给 ${target?.name || '所选角色'}`;
-        }
+
 
         if (artifact.kind === 'appearance-preset') {
             const patch = installableToThemePatch(artifact);
@@ -3507,12 +3470,6 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         }
     }, [displayMessages]);
 
-    // 稳定的思维链配置对象：只在角色/样式变化时重建，避免每次渲染新建对象击穿 MessageItem.memo。
-    const thinkingChainOptions = useMemo(() => ({
-        ...resolvePsycheAppearance(osTheme, char),
-        onOpenSettings: () => setShowThinkingChainModal(true),
-    }), [char?.thinkingChainStyle, char?.thinkingChainCustomColors, osTheme.chatPsyche]);
-
     // 工具痕迹那行灰字要贴着气泡走，所以把气泡自带的组间距（MessageItem 里那组
     // mb-3 / mb-6 / mb-8）抵掉大半。组内的气泡本来就挨着，不用抵。
     const toolTracePullClass = osTheme.chatMessageSpacing === 'compact' ? '-mt-2'
@@ -3540,7 +3497,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         active: (activeApp === AppID.Chat || !!homePhone) && !!char,
         blocked: isInputFocused || !!input.trim() || showPanel !== 'none' || modalType !== 'none'
             || selectionMode || isSummarizing || collaborationOpen || memoryRepairOpen || favoritesOpen
-            || showProactiveModal || showActiveMsg2Modal || showThinkingChainModal
+            || showProactiveModal || showActiveMsg2Modal
             || mcdAppOpen || luckinAppOpen || showForwardModal,
         generating: isTyping || instantChatPending || isProactiveComposing,
         onGenerate: handleManualTrigger,
@@ -3864,9 +3821,9 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                 settingsContextRangeMode={settingsContextRangeMode} setSettingsContextRangeMode={setSettingsContextRangeMode}
                 settingsHideSysLogs={settingsHideSysLogs} setSettingsHideSysLogs={setSettingsHideSysLogs}
                 settingsInputPreferences={settingsInputPreferences} setSettingsInputPreferences={setSettingsInputPreferences}
-                contextSuiteAnyEnabled={contextSuiteAnyEnabled}
-                contextSuiteAllEnabled={contextSuiteAllEnabled}
-                onToggleContextSuite={handleToggleContextSuite}
+
+
+
                 editContent={editContent} setEditContent={setEditContent}
                 archivePrompts={archivePrompts} selectedPromptId={selectedPromptId} setSelectedPromptId={(id: string) => {
                     setSelectedPromptId(id);
@@ -4237,7 +4194,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                             onResolveTransfer={handleResolveTransfer}
                             onResolveLifeRecord={handleResolveLifeRecord}
                             onOpenCollaborationFile={handleOpenCollaborationFile}
-                            thinkingChainOptions={thinkingChainOptions}
+
                         />
                         {showToolTrace && (
                             <div className={`px-3 mb-4 ${breaksWithNext ? toolTracePullClass : ''}`}>
@@ -4261,20 +4218,6 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                         ) : (
                             <span className="text-[11px] text-slate-400">已到当前最新消息</span>
                         )}
-                    </div>
-                )}
-
-                {/* 渠道确实发送 reasoning 增量时，先用正式心象卡实时展示；落库后同帧交给正式消息。 */}
-                {streamingThinking && !selectionMode && (
-                    <div className="group flex items-end justify-start relative px-3 mb-1.5 animate-fade-in">
-                        <div className="relative max-w-[72%] min-w-0 ml-12">
-                            <ThinkingChainBlock
-                                chain={streamingThinking}
-                                styleId={thinkingChainOptions.styleId}
-                                customColors={thinkingChainOptions.customColors}
-                                onOpenSettings={thinkingChainOptions.onOpenSettings}
-                            />
-                        </div>
                     </div>
                 )}
 
@@ -4311,7 +4254,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                                     bubbleVariant={osTheme.chatBubbleStyle}
                                     messageSpacing={osTheme.chatMessageSpacing}
                                     showTimestamp={osTheme.chatShowTimestamp}
-                                    thinkingChainOptions={thinkingChainOptions}
+
                                 />
                             </div>
                         ))}
@@ -4450,7 +4393,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                     luckinConfigured={luckinConfiguredFlag}
                     luckinActivated={luckinActivated}
                     htmlModeEnabled={!!(char as any).htmlModeEnabled}
-                    showThinkingChain={!!(char as any).showThinkingChain}
+
                     inputStyle={osTheme.chatInputStyle}
                     sendButtonStyle={osTheme.chatSendButtonStyle}
                     chromeStyle={osTheme.chatChromeStyle}
@@ -4510,34 +4453,6 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                         activeMsg2Config: updater(prev.activeMsg2Config),
                     }))}
                     addToast={addToast}
-                />
-            )}
-
-            {/* 思考链设置 Modal — 入口：聊天加号面板「展示思考」按钮长按 / 思考链卡片右上齿轮 */}
-            {char && (
-                <ThinkingChainSettingsModal
-                    isOpen={showThinkingChainModal}
-                    onClose={() => setShowThinkingChainModal(false)}
-                    value={{
-                        enabled: !!(char as any).showThinkingChain,
-                        styleId: ((char as any).thinkingChainStyle as any) || 'echo',
-                        customColors: {
-                            bg: (char as any).thinkingChainCustomColors?.bg || '#1f2937',
-                            accent: (char as any).thinkingChainCustomColors?.accent || '#fbbf24',
-                            text: (char as any).thinkingChainCustomColors?.text || '#f1f5f9',
-                        },
-                        customPrompt: (char as any).thinkingChainCustomPrompt || '',
-                        customCss: (char as any).thinkingChainCustomCss || '',
-                    }}
-                    onChange={(next) => {
-                        const patch: any = {};
-                        if (next.enabled !== undefined) patch.showThinkingChain = next.enabled;
-                        if (next.styleId !== undefined) patch.thinkingChainStyle = next.styleId;
-                        if (next.customColors !== undefined) patch.thinkingChainCustomColors = next.customColors;
-                        if (next.customPrompt !== undefined) patch.thinkingChainCustomPrompt = next.customPrompt;
-                        if (next.customCss !== undefined) patch.thinkingChainCustomCss = next.customCss;
-                        if (Object.keys(patch).length) updateCharacter(char.id, patch as any);
-                    }}
                 />
             )}
 

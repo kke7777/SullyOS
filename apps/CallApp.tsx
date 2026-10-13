@@ -39,7 +39,6 @@ import CallUpdateAnnouncement from '../components/call/CallUpdateAnnouncement';
 import { deleteAvatarModel, inspectAvatarFile, saveAvatarModel } from '../utils/avatarModelStore';
 import { getLive2DAIActions, prewarmLive2DModelSource, saveLive2DModelFromFiles, saveLive2DModelFromZip, upgradeLive2DAutoPermissions, type Live2DAvatarConfig } from '../utils/live2dModelStore';
 import { preloadLive2DRuntime } from '../utils/live2dCore';
-import { buildThinkingChainPrompt } from '../utils/thinkingChainPrompt';
 import { parseCallAssistantMessage, stripCallTextFormatting, type ParsedCallReply } from '../utils/callReplyFormat';
 import { runCallMemoryPalacePostFlow } from '../utils/memoryPalace/callPostFlow';
 import {
@@ -1976,14 +1975,6 @@ ${sentencePlan}`;
         ? buildPendingAvatarTouchContext(pendingTouches, selectedChar.name, userName)
         : '';
       const messages = await buildHistoryMessages(input, skipDbId, touchContext);
-      const thinkingPrompt = selectedChar?.showThinkingChain
-        ? [
-            buildThinkingChainPrompt(selectedChar.name, userName),
-            selectedChar.thinkingChainCustomPrompt?.trim()
-              ? `【用户追加的 THINKING 要求】\n${selectedChar.thinkingChainCustomPrompt.trim()}`
-              : '',
-          ].filter(Boolean).join('\n\n')
-        : '';
       // 模型专属动作白名单：Live2D 用用户授权的 actions；VRM 用加载时枚举出的
       // 自定义表情（星星眼/黑脸这类，预设之外的全部可用）。
       const allowedModelActions = getAllowedModelActions();
@@ -2014,7 +2005,6 @@ ${sentencePlan}`;
         baseCallPrompt,
         callMode === 'video' && !highQualityPerformance ? buildAvatarPerformancePrompt(allowedModelActions) : '',
         userCameraEmotionContext,
-        thinkingPrompt,
       ].filter(Boolean).join('\n\n');
       const systemPrompt = [baseSystemPrompt, userCameraSnapshot ? USER_CAMERA_SNAPSHOT_SYSTEM_NOTE : '']
         .filter(Boolean)
@@ -2081,7 +2071,7 @@ ${sentencePlan}`;
       if (liveSpeech && !chatData?.choices?.[0]?.message?.content) throw new Error('文字接口未返回可朗读的正文');
       const parsed = parseCallAssistantMessage(
         chatData?.choices?.[0]?.message,
-        !!selectedChar?.showThinkingChain,
+        false,
       );
       if (textAbort.signal.aborted) throw new DOMException('通话已停止', 'AbortError');
       if (liveSpeech && !receivedTextDelta) addToast('文字接口未返回流式内容，本轮在台词写完后开始播放', 'info');
@@ -3951,12 +3941,6 @@ ${sentencePlan}`;
                 const { display, voiceText } = extractVoiceTag(line || bubble.text);
                 const cleanVoice = stripTtsMarkupForDisplay(voiceText, apiConfig);
                 return <>
-                  {bubble.thinkingChain && (
-                    <details className="group mb-2 rounded-xl border border-white/10 bg-white/[0.035] px-2.5 py-2 text-[11px] text-white/55">
-                      <summary className="cursor-pointer list-none select-none text-[10px] tracking-[0.16em] text-white/45 before:mr-1 before:content-['＋'] group-open:before:content-['－']">心象</summary>
-                      <div className="mt-2 whitespace-pre-wrap border-t border-white/8 pt-2 leading-relaxed text-white/60">{bubble.thinkingChain}</div>
-                    </details>
-                  )}
                   {renderAssistantLine(display, accentColor)}
                   {cleanVoice && <div className="mt-1 text-[11px] text-white/45 italic">{cleanVoice}</div>}
                 </>;

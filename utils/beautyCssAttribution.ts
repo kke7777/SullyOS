@@ -1,7 +1,7 @@
 import {parseDecorationText,validateDecoration,type DecorationPreset} from './chatDecoration';
 import {makeWorkshopPreset,replaceWorkshopCss,type DecorationWorkshop} from './decorationWorkshop';
 import type {DecorationOrigin} from './decorationLibrary';
-export interface CssAttribution {name:string;credit:string;category:DecorationWorkshop;allowRemix?:boolean;allowRedistribute?:boolean}
+export interface CssAttribution {name:string;credit:string;category:DecorationWorkshop|'psyche';allowRemix?:boolean;allowRedistribute?:boolean}
 const categories=['whitebox','bubbles','avatar','background','psyche','sound','schedule','journal'];
 const marker=/\/\* SULLY-BEAUTY-V1 ([^\r\n]*?) \*\//;
 export function readCssAttribution(css:string):CssAttribution|null{
@@ -26,7 +26,7 @@ export function cssImportPreset(css:string,name:string,fallbackCategory:Decorati
  const checked=parseDecorationText(text,name);
  if(checked.parts.css===undefined)throw Error('这里仅接收 CSS，请通过文件导入装扮包');
  let preset=checked;
- if(meta||fallbackCategory!=='whitebox'){const category=meta?.category||fallbackCategory;preset=makeWorkshopPreset(category);preset.name=meta?.name||name;
+ if(meta||fallbackCategory!=='whitebox'){const category=meta?.category||fallbackCategory;preset=category==='psyche'?{format:'sullyos-chat-decoration',version:1,name,parts:{psyche:{styleId:'echo'}}}:makeWorkshopPreset(category);preset.name=meta?.name||name;
   if(category==='journal')preset.parts.journal!.customCss=text;
   else if(category==='schedule')preset.parts.schedule!.customCss=text;
   else if(category==='bubbles')preset.parts.bubbles!.customCss=text;

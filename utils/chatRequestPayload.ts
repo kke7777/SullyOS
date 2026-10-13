@@ -19,14 +19,7 @@ import type { CharacterProfile, UserProfile, GroupProfile, Emoji, EmojiCategory,
 import { ChatPrompts, detectChatModeTransition } from './chatPrompts';
 import { ContextBuilder } from './context';
 import { injectMemoryPalace } from './memoryPalace/pipeline';
-import { renderLocalContextGuidance } from './memoryPalace/recallRouter';
-import { renderInteractionAdaptationGuidance } from './memoryPalace/interactionAdaptation';
-import { renderDeepEngagementGuidance } from './memoryPalace/deepEngagement';
-import { renderConversationEngagementGuidance } from './memoryPalace/conversationEngagement';
-import type { ConversationEngagementAnalysis } from './memoryPalace/conversationEngagement';
-import type { DeepEngagementAnalysis } from './memoryPalace/deepEngagement';
 import { buildHtmlPrompt } from './htmlPrompt';
-import { buildThinkingChainPrompt } from './thinkingChainPrompt';
 import { buildMcdMiniAppContextBlock } from './mcdToolBridge';
 import type { McdMiniAppSnapshot } from './mcdToolBridge';
 import { buildLuckinMiniAppContextBlock, buildLuckinChatSystemBlock } from './luckinToolBridge';
@@ -433,16 +426,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         systemPrompt += `\n\n${buildHtmlPrompt(htmlMode?.customPrompt)}`;
     }
 
-    // ── 6. 思考链提示词 ───────────────────────────────────
-    const thinkingActive = !input.appPrompt && !!thinkingChain?.enabled;
-    if (thinkingActive) {
-        const userName = (userProfile?.name && userProfile.name.trim()) || '用户';
-        systemPrompt += `\n\n${buildThinkingChainPrompt(char.name, userName)}`;
-        const extra = (thinkingChain?.customPrompt || '').trim();
-        if (extra) {
-            systemPrompt += `\n\n## 用户对内心独白的额外要求\n${extra}`;
-        }
-    }
+    const thinkingActive = false;
 
     const messagesWithWorldbookDepth = parts.history;
 
@@ -491,17 +475,6 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
     // 私聊与 3D 家园共用本地语境分析：它告诉主模型“这句话此刻在做什么”，
     // 不指定具体记忆答案、不改变角色人格，也不进入其他 App 的专属写作提示。
     if (isChatConversationEntry(input.recallEntryPoint)) {
-        volatileTail += renderLocalContextGuidance(recallTrace.contextAnalyzer);
-        volatileTail += renderInteractionAdaptationGuidance(recallTrace.interactionAdaptation?.analysis);
-        const engagementTrace = recallTrace.deepEngagement;
-        if (engagementTrace?.engine === 'legacy_depth') {
-            volatileTail += renderDeepEngagementGuidance(engagementTrace.analysis as DeepEngagementAnalysis | undefined);
-        } else if (engagementTrace?.engine === 'conversation_v2') {
-            // M3 核心原则常驻；分析结果只决定是否在后面追加当轮状态策略。
-            volatileTail += renderConversationEngagementGuidance(
-                engagementTrace.analysis as ConversationEngagementAnalysis | undefined,
-            );
-        }
         if (char.chatCollaborationEnabled) {
             volatileTail += await prepare('collaboration',()=>loadCollaborationFileCabinetBlock(
                 char.id,

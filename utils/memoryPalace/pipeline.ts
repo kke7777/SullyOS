@@ -105,13 +105,6 @@ import {
     lookupEventBoxLightCandidates,
     mergeEventBoxLightCandidates,
 } from './eventBoxLightIndex';
-import { analyzeUserInteraction } from './interactionAdaptation';
-import { analyzeDeepEngagement } from './deepEngagement';
-import {
-    analyzeConversationEngagement,
-    clearConversationEngagementState,
-    shouldUseLegacyDeepEngagement,
-} from './conversationEngagement';
 import {
     createRecallTrace,
     finishRecallTrace,
@@ -1269,86 +1262,8 @@ export async function injectMemoryPalace(
         });
     }
 
-    if (!trace.featureFlagsSnapshot.interactionAdaptation) {
-        trace.interactionAdaptation = { status: 'disabled' };
-    } else if (!interactiveRecall) {
-        trace.interactionAdaptation = { status: 'out_of_scope' };
-    } else {
-        const interactionStartedAt = performance.now();
-        const interaction = analyzeUserInteraction(
-            recentMessages || [],
-            char.interactionAccommodation,
-            char.name,
-            userName,
-        );
-        trace.interactionAdaptation = {
-            status: interaction.analyzable ? 'observed' : 'no_signal',
-            analysis: interaction,
-        };
-        console.log(
-            `🎚️ [InteractionAdaptation] ${interaction.analyzable ? 'observed' : 'no_signal'}: `
-            + `impulse=${JSON.stringify(interaction.impulse)} `
-            + `trend=${JSON.stringify(interaction.trend)} `
-            + `policy=${JSON.stringify(interaction.policy)}`,
-        );
-        trace.stages.push({
-            name: 'interaction_adaptation',
-            durationMs: Math.round(performance.now() - interactionStartedAt),
-            outcome: interaction.analyzable ? 'ok' : 'empty',
-        });
-    }
-
-    if (!trace.featureFlagsSnapshot.deepEngagement) {
-        trace.deepEngagement = { status: 'disabled' };
-    } else if (!interactiveRecall) {
-        trace.deepEngagement = { status: 'out_of_scope' };
-    } else {
-        const depthStartedAt = performance.now();
-        const legacyRequested = shouldUseLegacyDeepEngagement();
-        let engine: 'conversation_v2' | 'legacy_depth' = legacyRequested ? 'legacy_depth' : 'conversation_v2';
-        let depth: ReturnType<typeof analyzeDeepEngagement> | ReturnType<typeof analyzeConversationEngagement>;
-        try {
-            depth = legacyRequested
-                ? analyzeDeepEngagement(recentMessages || [], char.name, userName)
-                : analyzeConversationEngagement(char.id, recentMessages || [], char.name, userName);
-        } catch (error) {
-            // M3 是质量增强层。v2 状态损坏或边界输入出错时，当轮回退旧分析，不能阻断聊天。
-            console.warn('[ConversationEngagement] v2 failed, falling back to legacy depth:', error);
-            clearConversationEngagementState(char.id);
-            engine = 'legacy_depth';
-            depth = analyzeDeepEngagement(recentMessages || [], char.name, userName);
-        }
-        trace.deepEngagement = {
-            status: depth.analyzable ? 'observed' : 'no_signal',
-            engine,
-            analysis: depth,
-        };
-        if (engine === 'conversation_v2') {
-            const engagement = depth as ReturnType<typeof analyzeConversationEngagement>;
-            console.log(
-                `🧭 [ConversationEngagement] core=on overlay=${engagement.shouldGuide ? 'on' : 'off'} ${engagement.conversationAct}: `
-                + `${engagement.previousEngagementState}->${engagement.engagementState} `
-                + `mode=${engagement.interactionMode} `
-                + `act=${engagement.responsePlan.primary}${engagement.responsePlan.secondary ? `+${engagement.responsePlan.secondary}` : ''} `
-                + `subject=${engagement.subject.active ? 'active' : 'idle'} `
-                + `openness=${engagement.subject.openness.toFixed(2)} `
-                + `stance=${engagement.stance.confidence.toFixed(2)} `
-                + `reasons=${engagement.reasons.join(',')}`,
-            );
-        } else {
-            const legacy = depth as ReturnType<typeof analyzeDeepEngagement>;
-            console.log(
-                `🪞 [DeepEngagement:legacy] ${legacy.analyzable ? legacy.mode : 'no_signal'}: `
-                + `depth=${legacy.state.analyticalDepth.toFixed(2)} `
-                + `confidence=${legacy.confidence.toFixed(2)}`,
-            );
-        }
-        trace.stages.push({
-            name: 'deep_engagement',
-            durationMs: Math.round(performance.now() - depthStartedAt),
-            outcome: depth.analyzable ? 'ok' : 'empty',
-        });
-    }
+    trace.interactionAdaptation = { status: 'disabled' };
+    trace.deepEngagement = { status: 'disabled' };
 
     if (!char.memoryPalaceEnabled) {
         trace.stages.push({ name: 'finalize', durationMs: 0, outcome: 'skipped' });

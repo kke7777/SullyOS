@@ -34,7 +34,6 @@ export default function DecorationDraftEditor({getUsage,outfits=[],onOutfitsChan
  const [outfitOpen,setOutfitOpen]=useState(false);const [deleteOutfit,setDeleteOutfit]=useState<WardrobeEntry|null>(null);
  const [sideOpen,setSideOpen]=useState(false);const [saveOpen,setSaveOpen]=useState(false);
  const [layoutOpen,setLayoutOpen]=useState(false);
- const [editCurrentPsyche,setEditCurrentPsyche]=useState(false);
  const [category,setCategory]=useState<Shelf>(maker||'whitebox');
  const [shelf,setShelf]=useState<Shelf|null>(null);
  const [query,setQuery]=useState('');const [page,setPage]=useState(0);
@@ -42,8 +41,7 @@ export default function DecorationDraftEditor({getUsage,outfits=[],onOutfitsChan
  const combinedOrigin=useMemo(()=>combineDecorationOrigins(Object.values(origins)),[origins]);
  useLocalBackHandler(()=>{
    if(busy)return true;
-   if(editCurrentPsyche)setEditCurrentPsyche(false);
-   else if(saveOpen)setSaveOpen(false);
+   if(saveOpen)setSaveOpen(false);
    else if(layoutOpen)setLayoutOpen(false);
    else if(outfitOpen)setOutfitOpen(false);
    else if(sideOpen)setSideOpen(false);
@@ -58,7 +56,6 @@ export default function DecorationDraftEditor({getUsage,outfits=[],onOutfitsChan
    if(category==='journal')return {...old,parts:{...old.parts,journal:{...old.parts.journal,customCss:css}}};
    if(category==='schedule')return {...old,parts:{...old.parts,schedule:{...old.parts.schedule,customCss:css}}};
    if(category==='bubbles')return {...old,parts:{...old.parts,bubbles:{...(old.parts.bubbles||structuredClone(PRESET_THEMES.default)),customCss:css}}};
-   if(category==='psyche')return {...old,parts:{...old.parts,psyche:{styleId:'echo',...old.parts.psyche,customCss:css}}};
    if(category==='background'||category==='avatar')return {...old,parts:{...old.parts,css:replaceWorkshopCss(old.parts.css||'',category,css)}};
    return {...old,parts:{...old.parts,css}};
  });
@@ -122,7 +119,7 @@ export default function DecorationDraftEditor({getUsage,outfits=[],onOutfitsChan
       <button onClick={async()=>{try{await navigator.clipboard.writeText(workshopPrompt(category));setNotice('已复制当前分类提示词');}catch{setError('复制失败');}}}>复制 AI 提示词</button>
       {category==='avatar'&&<AvatarFrameImageEditor css={categoryCss} disabled={busy} onChange={setCategoryCss} onBusy={setBusy} onError={setError}/>}
       {category==='background'&&<label>选择壁纸<input type="file" accept="image/*" disabled={busy} onChange={async e=>{const file=e.target.files?.[0];if(!file)return;try{if(file.size>12*1024*1024)throw Error('请选择 12 MB 以内的图片');const {blobToDataUrl}=await import('../../utils/blobRef');const image=await blobToDataUrl(file);setDraft(old=>({...old,parts:{...old.parts,background:{image,style:old.parts.background?.style||'plain'}}}));}catch(e){setError(e instanceof Error?e.message:'图片读取失败');}}}/></label>}
-      <CssCodeEditor disabled={busy} aria-label={`${shelves.find(([id])=>id===category)?.[1]} CSS`} spellCheck={false} value={categoryCss} onChange={setCategoryCss} placeholder={category==='psyche'?'.sully-psyche-card { }':category==='background'?'.sully-chat-root { background: #f5f5f5; }':'在这里编写或粘贴 CSS'}/>
+      <CssCodeEditor disabled={busy} aria-label={`${shelves.find(([id])=>id===category)?.[1]} CSS`} spellCheck={false} value={categoryCss} onChange={setCategoryCss} placeholder={category==='background'?'.sully-chat-root { background: #f5f5f5; }':'在这里编写或粘贴 CSS'}/>
       {category==='whitebox'&&<label>追加 CSS<textarea disabled={busy} aria-label="追加 CSS" spellCheck={false} value={extraCss} onChange={e=>setExtraCss(e.target.value)}/></label>}
      </>}
     </details>
@@ -133,7 +130,6 @@ export default function DecorationDraftEditor({getUsage,outfits=[],onOutfitsChan
   {!maker&&outfitOpen&&<OutfitCollection getUsage={getUsage} entries={outfits} busy={busy} error={error} onClose={()=>setOutfitOpen(false)} onChoose={entry=>void loadOutfit(entry)} onDelete={setDeleteOutfit} onSave={()=>setSaveOpen(true)}/> }
   {deleteOutfit&&<BeautyConfirmDialog title="删除这套搭配？" confirm="删除" danger onClose={()=>setDeleteOutfit(null)} onConfirm={async()=>{await deleteLibraryDecoration(deleteOutfit.id);await onOutfitsChange?.();}}><p>只移除搭配收藏，已应用的效果和各部件原件会保留。</p></BeautyConfirmDialog>}
   {saveOpen&&<BeautyConfirmDialog title="保存当前搭配" confirm="保存到搭配栏" onClose={()=>setSaveOpen(false)} onConfirm={async()=>{if(!canEditDecoration(combinedOrigin))throw Error("作者禁止二改");if(!draft.name.trim())throw Error("请填写搭配名称");const result={...preview,name:draft.name.trim()};await saveLibraryDecoration(result,remixOrigin(combinedOrigin),undefined,'outfit');trackBeauty('save','outfit');await onOutfitsChange?.();setNotice('已保存到搭配栏');}}><p>保存这次组合，下次可以整套应用。</p><label>搭配名称<input aria-label="搭配名称" maxLength={60} value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label></BeautyConfirmDialog>}
-  {editCurrentPsyche&&<DecorationDraftEditor preset={projectWorkshopPreset({...draft,name:'当前心象'},'psyche')} origin={combinedOrigin} theme={theme} sources={sources} maker="psyche" onOpenWorkshop={onOpenWorkshop} onClose={()=>setEditCurrentPsyche(false)} onSaved={next=>{setDraft(old=>({...old,parts:{...old.parts,psyche:next.parts.psyche}}));setEditCurrentPsyche(false);setShelf(null);void onOutfitsChange?.().catch(()=>setError('心象已保存，预设库刷新失败，请重新打开。'));setNotice('心象已保存到预设库；应用搭配后更新角色。');}}/>}
-  {shelf&&<div className="decoration-shelf-overlay"><section role="dialog" aria-modal="true" aria-label="选择搭配预设"><header><strong>{shelves.find(([id])=>id===shelf)?.[1]}</strong><button disabled={busy} onClick={()=>setShelf(null)}>关闭</button></header>{!maker&&shelf==='psyche'&&<button disabled={busy||locked} onClick={()=>setEditCurrentPsyche(true)}>编辑并另存当前心象</button>}<input type="search" aria-label="搜索搭配预设" placeholder="搜索预设名称" value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/><div className="decoration-shelf-results decoration-shelf-grid">{matches.slice(currentPage*8,currentPage*8+8).map(entry=><DecorationPresetThumb getUsage={getUsage} key={entry.id} entry={entry} category={shelf} disabled={busy} onChoose={()=>{void choose(entry);}}/>)}{!matches.length&&<p>暂无对应预设，请先在装扮库导入或保存。</p>}</div>{error&&<p role="alert">{error}</p>}<footer><button disabled={busy||currentPage===0} onClick={()=>setPage(currentPage-1)}>上一页</button><span>{currentPage+1} / {pageCount}</span><button disabled={busy||currentPage+1>=pageCount} onClick={()=>setPage(currentPage+1)}>下一页</button></footer></section></div>}
+  {shelf&&<div className="decoration-shelf-overlay"><section role="dialog" aria-modal="true" aria-label="选择搭配预设"><header><strong>{shelves.find(([id])=>id===shelf)?.[1]}</strong><button disabled={busy} onClick={()=>setShelf(null)}>关闭</button></header><input type="search" aria-label="搜索搭配预设" placeholder="搜索预设名称" value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/><div className="decoration-shelf-results decoration-shelf-grid">{matches.slice(currentPage*8,currentPage*8+8).map(entry=><DecorationPresetThumb getUsage={getUsage} key={entry.id} entry={entry} category={shelf} disabled={busy} onChoose={()=>{void choose(entry);}}/>)}{!matches.length&&<p>暂无对应预设，请先在装扮库导入或保存。</p>}</div>{error&&<p role="alert">{error}</p>}<footer><button disabled={busy||currentPage===0} onClick={()=>setPage(currentPage-1)}>上一页</button><span>{currentPage+1} / {pageCount}</span><button disabled={busy||currentPage+1>=pageCount} onClick={()=>setPage(currentPage+1)}>下一页</button></footer></section></div>}
  </div>,document.body);
 }

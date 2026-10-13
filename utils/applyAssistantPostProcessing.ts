@@ -785,29 +785,8 @@ export async function applyAssistantPostProcessing(
     const REPLY_CLEAN_CN = /\[回复\s*[""“][^""”]*?[""”](?:\.{0,3})\]\s*[：:]?\s*/g;
     const QUOTE_CLEAN_NL = /\[[^\[\]\n「」]{0,24}引用了[^\[\]\n「」]{0,24}「[^」\n]*?」[^\[\]\n]{0,24}\]\s*/g;
 
-    // 抽取思考链 (showThinkingChain 开启时): reasoning_content + 内联 <think> 块。
-    const extractThinkingChain = (dataObj: any, reasoningOverride?: string): string | null => {
-        if (!(char as any).showThinkingChain) return null;
-        const lastRaw = dataObj?.choices?.[0]?.message?.content || '';
-        const lastReasoning = (
-            (reasoningOverride && reasoningOverride.trim())
-            || dataObj?.choices?.[0]?.message?.reasoning_content
-            || ''
-        ).trim();
-        const thinkBlocks: string[] = [];
-        const thinkPat = /<(think|thinking|thought)>([\s\S]*?)<\/\1>/gi;
-        let tm: RegExpExecArray | null;
-        while ((tm = thinkPat.exec(lastRaw)) !== null) {
-            const t = tm[2].trim();
-            if (t) thinkBlocks.push(t);
-        }
-        if (!/<\/(?:think|thinking|thought)>/i.test(lastRaw)) {
-            const openOnly = lastRaw.match(/<(?:think|thinking|thought)>([\s\S]*$)/i);
-            if (openOnly && openOnly[1].trim()) thinkBlocks.push(openOnly[1].trim());
-        }
-        const chain = [lastReasoning, ...thinkBlocks].filter(s => !!s).join('\n\n').trim();
-        return chain || null;
-    };
+    // 心象已移除；兼容旧推送时也不保存思考内容。
+    const extractThinkingChain = (_data: unknown, _reasoning?: string): null => null;
 
     // 把一段文本 (parseAndExecuteActions / HTML 之外的部分) 渲染成气泡并落库 —— 双语 / 表情 / 引用 / 分段
     // 与原 inline 末尾逻辑一致。抽出来是为了让"执行功能前的本轮正文 A"能在二轮前先展示, 二轮结果 B 复用同一套。

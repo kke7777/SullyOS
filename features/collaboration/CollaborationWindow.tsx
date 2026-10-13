@@ -1183,26 +1183,6 @@ const CollaborationMarkdownView: React.FC<{ content: string }> = ({ content }) =
   </div>
 );
 
-const CollaborationThinkingBlock: React.FC<{ chain: string }> = ({ chain }) => {
-  const [expanded, setExpanded] = useState(false);
-  const text = chain.trim();
-  if (!text) return null;
-  const preview = text.replace(/\s+/g, ' ').slice(0, 44);
-  return (
-    <div className="collab-thinking mb-2.5 overflow-hidden rounded-[15px] border border-slate-200/80 bg-slate-50/80 text-slate-600">
-      <button type="button" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} className="flex w-full items-center gap-2 px-3 py-2.5 text-left active:bg-slate-100/80">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-white text-[12px] shadow-sm">💭</span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[10px] font-semibold tracking-[.08em] text-slate-500">思考过程</span>
-          {!expanded && <span className="mt-0.5 block truncate text-[10px] text-slate-400">{preview}{text.length > 44 ? '…' : ''}</span>}
-        </span>
-        <CaretDown size={14} className={`shrink-0 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-      </button>
-      {expanded && <div className="max-h-72 overflow-y-auto border-t border-slate-200/70 px-3.5 py-3 text-[11px] leading-[1.75] whitespace-pre-wrap break-words">{text}</div>}
-    </div>
-  );
-};
-
 interface CollaborationVoiceUiState {
   loading?: boolean;
   playing?: boolean;
@@ -1327,7 +1307,7 @@ const MessageBubble: React.FC<{
             borderRadius: style.borderRadius ?? 20,
           }}
         >
-          {!isUser && message.thinkingChain && <CollaborationThinkingBlock chain={message.thinkingChain} />}
+
           {isUser && message.requestedFormat && <div className="mb-1.5 text-[9px] font-semibold opacity-65">交付格式 · {OUTPUT_FORMAT_LABELS[message.requestedFormat]}</div>}
           {isUser && message.content && <CollaborationMarkdownView content={message.content} />}
           {!isUser && richOutput?.text && <CollaborationMarkdownView content={richOutput.text} />}
@@ -2323,7 +2303,7 @@ const CollaborationWindow: React.FC<CollaborationWindowProps> = ({
         onStatus: setToolStatus,
         makerKind: startedSession.makerKind,
         chatContextSnapshot: liveChatContext,
-        thinkingEnabled: !!character.showThinkingChain,
+
         turnContext: turnMemoryContext,
       });
       const parsedFiles = parseArtifactBlocks(reply.content);
@@ -2353,7 +2333,7 @@ const CollaborationWindow: React.FC<CollaborationWindowProps> = ({
         sessionId: sessionAtStart.id,
         role: 'assistant',
         content: visibleReply || (generatedAttachments.length ? '我做好了，作品放在这里。' : sanitizeCollaborationRichOutputSource(normalizeCollaborationVisibleText(reply.content))),
-        thinkingChain: reply.thinkingChain,
+
         createdAt: Date.now(),
         attachments: generatedAttachments,
       };

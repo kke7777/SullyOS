@@ -70,7 +70,6 @@ export const parseCollaborationReply = (data: any): ParsedCollaborationReply => 
   const uniqueChains = [...new Set([nativeChain, ...inlineChains].map(item => item.trim()).filter(Boolean))];
   return {
     content,
-    ...(uniqueChains.length ? { thinkingChain: uniqueChains.join('\n\n') } : {}),
   };
 };
 

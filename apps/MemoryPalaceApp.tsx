@@ -27,11 +27,10 @@ import {
     getBootstrapResume, setBootstrapResume, clearBootstrapResume,
     updateStoredMemoryNode,
     regenerateEventBoxSummary,
-    DEFAULT_CHARACTER_ACCOMMODATION,
 } from '../utils/memoryPalace';
 import type { Anticipation, MigrationProgress, DigestResult, MemoryLink, EventBox, DigestReport } from '../utils/memoryPalace';
 import { confirmExportSafety } from '../utils/exportGuard';
-import type { CharacterAccommodationPolicy, CharacterProfile, MemoryPalaceWaterlinePreset, Message } from '../types';
+import type { CharacterProfile, MemoryPalaceWaterlinePreset, Message } from '../types';
 import { CharacterGroupFilterBar, filterCharactersByGroup, GROUP_FILTER_ALL } from '../components/character/CharacterGroupFilter';
 import TokenImg from '../components/os/TokenImg';
 import {
@@ -1520,17 +1519,6 @@ export default function MemoryPalaceApp() {
         });
         setRrSaved(true);
         setTimeout(() => setRrSaved(false), 2000);
-    };
-
-    const updateAccommodation = (key: keyof CharacterAccommodationPolicy, value: number) => {
-        if (!char) return;
-        updateCharacter(char.id, {
-            interactionAccommodation: {
-                ...DEFAULT_CHARACTER_ACCOMMODATION,
-                ...(char.interactionAccommodation || {}),
-                [key]: value,
-            },
-        });
     };
 
     const handleSaveLightApi = () => {
@@ -3993,56 +3981,7 @@ create table if not exists memory_vectors (
                     </div>
                 </details>
 
-                <details style={{ marginTop: 12 }}>
-                    <summary style={{ fontSize: 10, color: '#0f766e', cursor: 'pointer', userSelect: 'none' }}>
-                        ChatApp 交流步伐
-                    </summary>
-                    <div style={{ marginTop: 8, background: '#f0fdfa', borderRadius: 12, padding: 14, border: '1px solid #99f6e4' }}>
-                        <div style={{ fontSize: 11, color: '#115e59', lineHeight: 1.65, marginBottom: 12 }}>
-                            设置这个角色愿意在多大程度上跟随用户当下的说话步伐。0% 表示该维度完全保持自己，100% 也只会在安全范围内适应，不会改写角色人格。
-                        </div>
-                        {([
-                            ['length', '回复长度'],
-                            ['rhythm', '来回节奏'],
-                            ['energy', '情绪能量'],
-                            ['punctuation', '标点力度'],
-                            ['emoji', 'Emoji 使用'],
-                        ] as Array<[keyof CharacterAccommodationPolicy, string]>).map(([key, label]) => {
-                            const value = char.interactionAccommodation?.[key]
-                                ?? DEFAULT_CHARACTER_ACCOMMODATION[key];
-                            return (
-                                <div key={key} style={{ marginBottom: key === 'emoji' ? 0 : 10 }}>
-                                    <label className={labelClass} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>{label}</span>
-                                        <span style={{ color: '#0f766e' }}>{Math.round(value * 100)}%</span>
-                                    </label>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={value}
-                                        onChange={event => updateAccommodation(key, parseFloat(event.target.value))}
-                                        style={{ width: '100%', accentColor: '#0f766e' }}
-                                    />
-                                </div>
-                            );
-                        })}
-                        <button
-                            onClick={() => updateCharacter(char.id, { interactionAccommodation: { ...DEFAULT_CHARACTER_ACCOMMODATION } })}
-                            style={{
-                                width: '100%', marginTop: 12, padding: '8px 0', borderRadius: 9,
-                                border: '1px solid #99f6e4', background: '#ffffff',
-                                fontSize: 11, fontWeight: 700, color: '#0f766e', cursor: 'pointer',
-                            }}
-                        >
-                            恢复温和默认值
-                        </button>
-                        <div style={{ fontSize: 10, color: '#0f766e', lineHeight: 1.55, marginTop: 10 }}>
-                            这里只影响 ChatApp 回复。角色回复不会被拿来反向训练这些数值，其他 App 的写作人格也不会变化。
-                        </div>
-                    </div>
-                </details>
+
 
                 {/* 手动总结与向量化（保底机制）：圈选聊天区间走一次总结，不碰水位线 */}
                 <div style={{ marginTop: 16, background: '#f5f3ff', borderRadius: 16, padding: 16, border: '1px solid #ddd6fe' }}>

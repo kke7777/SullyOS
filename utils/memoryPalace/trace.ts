@@ -3,15 +3,12 @@ import { appendDevDebugMemoryPalaceLog } from '../devDebug';
 import type { LocalContextAnalysis, RecallRouterTrace } from './recallRouter';
 import type { ExplicitEntitySignalSource } from './explicitEntityRecall';
 import type { EventBoxLightMatchSource } from './eventBoxLightIndex';
-import type { UserInteractionAnalysis } from './interactionAdaptation';
-import type { DeepEngagementAnalysis } from './deepEngagement';
-import type { ConversationEngagementAnalysis } from './conversationEngagement';
 
 /**
  * 任何会改变召回输出含义的实现都要升级这个版本。
  * Trace 不依赖构建 commit：同一 commit 做 A/B 时仍能看出实际跑的是哪代管线。
  */
-export const RECALL_PIPELINE_VERSION = 'context-m3.2';
+export const RECALL_PIPELINE_VERSION = 'context-features-removed.1';
 
 export const DEFAULT_MEMORY_PALACE_FEATURE_FLAGS: MemoryPalaceFeatureFlags = Object.freeze({
     recallRouter: false,
@@ -105,13 +102,13 @@ export interface RecallTrace {
     recallResolver?: { status: 'disabled' | 'out_of_scope' | 'deferred' };
     interactionAdaptation?: {
         status: 'disabled' | 'out_of_scope' | 'no_signal' | 'observed';
-        analysis?: UserInteractionAnalysis;
+        analysis?: unknown;
     };
     /** ChatApp 当轮的参与状态；v2 只含枚举、分数和计数，不含用户原文。 */
     deepEngagement?: {
         status: 'disabled' | 'out_of_scope' | 'no_signal' | 'observed';
         engine?: 'conversation_v2' | 'legacy_depth';
-        analysis?: ConversationEngagementAnalysis | DeepEngagementAnalysis;
+        analysis?: unknown;
     };
     /** @deprecated context-m1.4 前的旧 Trace 字段。 */
     recallRouter?: RecallRouterTrace;
@@ -165,9 +162,9 @@ function normalizeFeatureFlags(value: unknown): MemoryPalaceFeatureFlags {
         ? value as Partial<MemoryPalaceFeatureFlags>
         : {};
     return {
-        recallRouter: source.recallRouter === true,
-        interactionAdaptation: source.interactionAdaptation === true,
-        deepEngagement: source.deepEngagement === true,
+        recallRouter: false,
+        interactionAdaptation: false,
+        deepEngagement: false,
         epistemicState: source.epistemicState === true,
     };
 }

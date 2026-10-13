@@ -22,6 +22,6 @@ describe('memory palace pipeline runtime references', () => {
         expect(source).not.toContain('runLightRecallRouter(');
         expect(source).not.toContain('getLightLLMConfig(');
         expect(source).toContain('analyzeLocalContext(');
-        expect(source).toContain('analyzeDeepEngagement(');
+        expect(source).not.toContain('analyzeDeepEngagement(');
     });
 });
