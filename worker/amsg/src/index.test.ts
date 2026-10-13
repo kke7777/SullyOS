@@ -917,8 +917,8 @@ describe('频率与额度（到点兜底闸）', () => {
     });
     ctx.scheduleTask = vi.fn();
     const prompt = fired(await amsgHooks.onBeforeFire(ctx)).messages[0].content;
-    expect(prompt).toContain('现在还能再排 2 次');
-    expect(prompt).toContain('现在挂着 0 个');
+    expect(prompt).toContain('目前还能安排 2 次');
+    expect(prompt).toContain('目前有 0 个');
   });
 
   it('「不停」（0）时重复任务一直照发', async () => {
@@ -989,16 +989,16 @@ describe('频率与额度（到点兜底闸）', () => {
     expect((openTool?.function.parameters as any).properties).toHaveProperty('expire_policy');
   });
 
-  it('prompt 里写着「用户给你定的规矩」，额度按正在发的这一条算过', async () => {
+  it('prompt 里写着「排程限制」，额度按正在发的这一条算过', async () => {
     const { ctx } = makeCtx({
       charRows: rows({ settings: { maxUnansweredSends: 3, dailySendCap: 5 }, daily: { day: '2026-07-25', sends: 1 } }),
     });
     ctx.scheduleTask = vi.fn();
     const prompt = fired(await amsgHooks.onBeforeFire(ctx)).messages[0].content;
-    expect(prompt).toContain('用户给你定的规矩');
+    expect(prompt).toContain('排程限制');
     // 连发 3 次，正在发的这一次占 1 次 → 还能再排 2 次；今天发过 1 次 + 这一次 → 还剩 3 次。
-    expect(prompt).toContain('现在还能再排 2 次');
-    expect(prompt).toContain('今天还能再主动找对方 3 次');
+    expect(prompt).toContain('目前还能安排 2 次');
+    expect(prompt).toContain('今天还能主动联系 3 次');
   });
 });
 
@@ -4188,14 +4188,14 @@ describe('onBeforeFire — 即时对话分支', () => {
     const result = fired(await amsgHooks.onBeforeFire(ctx));
     const text = result.messages.map((m) => m.content).join('\n');
 
-    expect(text).toContain('你和小明的联系不只发生在正在聊天的时候');
-    expect(text).toContain('惦记、想分享、兑现承诺');
-    expect(text).toContain('睡觉、上课、上班、打游戏');
+    expect(text).toContain('各自生活的时候，你也会想起小明');
+    expect(text).toContain('惦记、想分享生活或兑现承诺');
+    expect(text).toContain('暂时顾不上手机');
     expect(text).toContain('自己的日程');
-    expect(text).toContain('就当场排成真任务，不要只在正文里答应');
+    expect(text).toContain('就当场排成任务；排程成功后再确认会联系');
     expect(text).toContain('明确说别打扰');
-    expect(text).toContain('用户给你定的规矩');
-    expect(text.match(/你和小明的联系/g)).toHaveLength(1);
+    expect(text).toContain('排程限制');
+    expect(text.match(/你也会想起小明/g)).toHaveLength(1);
     expect(text).not.toContain('这条消息发完，如果还有话');
     expect(scheduleTask).not.toHaveBeenCalled();
 
@@ -4219,7 +4219,7 @@ describe('onBeforeFire — 即时对话分支', () => {
     });
     if (reason === 'disabled') (ctx as any).scheduleTask = vi.fn();
     const result = fired(await amsgHooks.onBeforeFire(ctx));
-    expect(result.messages.map((m) => m.content).join('\n')).not.toContain('你和小明的联系');
+    expect(result.messages.map((m) => m.content).join('\n')).not.toContain('你也会想起小明');
     expect(result.tools?.map((t) => t.function.name) ?? []).not.toContain(AMSG_FIRE_SCHEDULE_TOOL);
   });
 

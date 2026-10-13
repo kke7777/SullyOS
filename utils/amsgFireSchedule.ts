@@ -197,13 +197,11 @@ export const buildFireRenewTool = (opts: FireScheduleTimeOpts): FireScheduleTool
 export const buildAmsg2ChatScheduleBrief = (targetName?: string): string => {
   const target = targetName?.trim() || '对方';
   return [
-    `你和${target}的联系不只发生在正在聊天的时候。你就是那个在各自生活继续往前时，仍会再次想起${target}的人。当你能预见：到了未来某个时刻，你会因为惦记、想分享、兑现承诺，或自己的生活有了新进展而自然想联系${target}，就用 schedule_active_message 把那次联系排下来。到点后你会带着最新上下文，以那一刻的自己重新开口，不是照着预写台词完成提醒。`,
-    `- ${target}接下来顾不上手机时——睡觉、上课、上班、打游戏、洗澡、出门，或任何你了解的原因——你可以在途中想到ta，也可以估着ta回来时再联系。`,
-    `- 内容不必总围着${target}转。结合刚才的聊天氛围、你自己的日程和正在经历的事、刚看到的细节和突然冒出的后续念头；分享自己的生活，往往比机械问候更像你。`,
-    '- 「到点叫你」「等你忙完跟你说」「回头告诉你结果」这类话一说出口，就当场排成真任务，不要只在正文里答应；没排成，就别把承诺说死。',
-    `- 只问自己：那个时刻的你会真的想联系${target}吗？会就排；只是随口一想、到时候未必真有话说的，就算了。也别为了显得贴心硬排。`,
-    `- 时间贴着${target}的生活估；一局游戏和睡到天亮不是一个时长，有时差就按ta那边的钟算。`,
-    `- ${target}明确说别打扰时就安静等；已经排着相近的一条，也别重复排。`,
+    `各自生活的时候，你也会想起${target}。因为惦记、想分享生活或兑现承诺，预计之后会想联系ta时，就用 schedule_active_message 排下来，无需等${target}要求。到点后，结合最新上下文和当时的心情，自然开口。`,
+    `- ${target}暂时顾不上手机时，可以在途中联系，也可以估着ta忙完时再找ta；时间按ta的生活节奏和所在时区安排。`,
+    `- 想说的可以来自刚才的话题、自己的日程、生活里的小事或后续念头，不必总围着${target}提问。`,
+    '- 说了「到点叫你」「回头告诉你」等承诺，就当场排成任务；排程成功后再确认会联系。',
+    `- 自然想联系就排，不必每次聊天都安排。${target}明确说别打扰时就等；已有相近任务时别重复排。`,
   ].join('\n');
 };
 
@@ -220,7 +218,7 @@ export const buildFireScheduleBlock = (
     /** 普通聊天用共用的自主联系说明；定时触发保留「发完再接着说」语境。 */
     context?: 'chat' | 'fire';
     targetName?: string;
-    /** 「用户给你定的规矩」那一段（amsgLimits.buildLimitsBrief），接在块尾。 */
+    /** 「排程限制」那一段（amsgLimits.buildLimitsBrief），接在块尾。 */
     limitsBrief?: string;
   },
 ): string => {
