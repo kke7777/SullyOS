@@ -5,9 +5,8 @@ import { existsSync } from 'node:fs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const env = {
   ...process.env,
-  // This standalone shell has neither the original UnifiedPush plugin nor
-  // the original publisher's signing identity/update channel.
-  VITE_AMSG_NATIVE_PUSH: 'false',
+  // Use the Android UnifiedPush bridge; retain our independent update channel.
+  VITE_AMSG_NATIVE_PUSH: 'true',
   VITE_APK_UPDATE_MANIFEST_URL: '',
   VITE_UMAMI_SCRIPT_URL: '',
   VITE_UMAMI_WEBSITE_ID: '',

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   saveInboxMessage: vi.fn().mockResolvedValue(undefined),
   flushInboxToChat: vi.fn().mockResolvedValue(undefined),
+  handleError: vi.fn().mockResolvedValue(undefined),
+  dispatchResult: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('./activeMsgStore', () => ({
@@ -10,7 +12,9 @@ vi.mock('./activeMsgStore', () => ({
 }));
 vi.mock('./activeMsgRuntime', () => ({
   flushInboxToChat: mocks.flushInboxToChat,
+  handleInstantErrorPushMessage: mocks.handleError,
 }));
+vi.mock('./amsgResults', () => ({ dispatchAmsgResult: mocks.dispatchResult }));
 
 import { ingestNativeAmsgPayload, parseNativeAmsgPayload } from './nativeAmsgInbox';
 
@@ -19,6 +23,25 @@ describe('UnifiedPush payload 入库桥', () => {
     localStorage.clear();
     mocks.saveInboxMessage.mockClear();
     mocks.flushInboxToChat.mockClear();
+    mocks.handleError.mockClear();
+    mocks.dispatchResult.mockReset().mockResolvedValue(true);
+  });
+
+  it('routes task results to their handler and retains failed results for retry', async () => {
+    const payload = { messageId: 'result-1', messageKind: 'result', metadata: { charId: 'c' } };
+    mocks.dispatchResult.mockResolvedValueOnce(false);
+    await expect(ingestNativeAmsgPayload(payload)).rejects.toThrow();
+    await ingestNativeAmsgPayload(payload);
+    expect(mocks.dispatchResult).toHaveBeenCalledTimes(2);
+    expect(mocks.saveInboxMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps error events and emotion updates out of normal chat text', async () => {
+    await ingestNativeAmsgPayload({ messageId: 'err-1', messageKind: 'error', message: 'failed', metadata: { charId: 'c' } });
+    expect(mocks.handleError).toHaveBeenCalledWith(expect.objectContaining({ charId: 'c' }));
+    expect(mocks.saveInboxMessage).not.toHaveBeenCalled();
+    await ingestNativeAmsgPayload({ messageId: 'emo-1', messageKind: 'emotion_update', message: 'not a chat message', metadata: { charId: 'c', emotionRaw: 'raw' } });
+    expect(mocks.saveInboxMessage).toHaveBeenCalledWith(expect.objectContaining({ body: '', messageType: 'emotion_update', metadata: { charId: 'c', emotionRaw: 'raw' } }));
   });
 
   it('接受对象或 JSON 字符串，拒绝无效内容', () => {

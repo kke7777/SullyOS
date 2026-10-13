@@ -15,5 +15,17 @@
       "style": "dark",
       "resizeOnFullScreen": true
     }
+  },
+  "android": {
+    "includePlugins": [
+      "@capacitor-community/speech-recognition",
+      "@capacitor/app",
+      "@capacitor/filesystem",
+      "@capacitor/geolocation",
+      "@capacitor/keyboard",
+      "@capacitor/local-notifications",
+      "@capacitor/share",
+      "@capacitor/status-bar"
+    ]
   }
 }

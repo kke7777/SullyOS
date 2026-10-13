@@ -19,6 +19,7 @@ export interface UnifiedPushStatus {
 }
 
 export interface UnifiedPushStoredMessage {
+  id: string;
   payload: string;
   receivedAt: number;
 }
@@ -27,7 +28,8 @@ interface UnifiedPushNativePlugin {
   getStatus(): Promise<Omit<UnifiedPushStatus, 'permission'>>;
   register(options: { vapidPublicKey: string }): Promise<{ pending: boolean }>;
   unregister(): Promise<void>;
-  drainPendingPushes(): Promise<{ messages: UnifiedPushStoredMessage[]; launchPayload?: string }>;
+  drainPendingPushes(): Promise<{ messages: UnifiedPushStoredMessage[]; launchPayload?: string; launchId?: string }>;
+  acknowledgePushes(options: { ids: string[]; launchId?: string }): Promise<void>;
   addListener(
     eventName: 'pushReceived' | 'notificationTapped' | 'registrationChanged',
     listener: (event: any) => void,
@@ -112,6 +114,9 @@ export const readUnifiedPushSubscription = async () =>
   (await getUnifiedPushStatus()).subscription;
 
 export const drainUnifiedPushMessages = () => NativeUnifiedPush.drainPendingPushes();
+
+export const acknowledgeUnifiedPushMessages = (ids: string[], launchId?: string) =>
+  NativeUnifiedPush.acknowledgePushes({ ids, launchId });
 
 export const addUnifiedPushListener = (
   eventName: 'pushReceived' | 'notificationTapped' | 'registrationChanged',
