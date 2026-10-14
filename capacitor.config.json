@@ -13,7 +13,7 @@
     "Keyboard": {
       "resize": "body",
       "style": "dark",
-      "resizeOnFullScreen": true
+      "resizeOnFullScreen": false
     }
   },
   "android": {
