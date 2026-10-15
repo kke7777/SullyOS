@@ -571,11 +571,12 @@ describe('上云的这一轮也进「API 调用记录」', () => {
 
   it('回复回来 → 同一条记录补上用量，时间戳一个字不动（列表顺序不许跟着回复先后跳）', async () => {
     const logged = captureLog();
-    settleInstantChatApiLog('uuid-log', { amsgUsage: { promptTokens: 1200, completionTokens: 80 } });
+    settleInstantChatApiLog('uuid-log', { amsgUsage: { promptTokens: 1200, completionTokens: 80, cacheReadTokens: 1000, cacheWriteTokens: 100 } });
     await vi.waitFor(() => expect(logged).toHaveLength(1));
     expect(logged[0]).toMatchObject({
       id: 'cloud-uuid-log', pending: false, ok: true,
       promptTokens: 1200, completionTokens: 80,
+      cacheReadTokens: 1000, cacheWriteTokens: 100,
       // 云端只报入和出，总数本地自己加——列表顶上的合计读的就是它。
       totalTokens: 1280,
     });

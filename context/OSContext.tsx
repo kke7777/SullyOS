@@ -1,3 +1,4 @@
+import { fetchWithClaudeTransport } from '../utils/claudeTransport';
 import { handleLocalBack } from '../utils/localBackHandlers';
 import {isHomeAssetDisposal} from '../utils/homeAssetCancellation';
 import { processHomeMemoryAfterSave } from '../utils/homeMemoryPostHook';
@@ -1252,13 +1253,15 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           // 用户手动开启的「本次发送统计」：只抢占下一条请求，并在真正发出前立即自动关闭。
           // 取兼容层处理后的 sendArgs，展示内容与本次实际提交给服务端的请求体一致。
           let apiRequestCaptureId: string | null = null;
-          if (urlStr.includes('/chat/completions')) {
-              const captureMeta = (sendArgs[1] as any)?.__sullyMeta || ambientMetaAtStart;
-              apiRequestCaptureId = captureApiRequestOnce({ url: urlStr, body: (sendArgs[1] as any)?.body, meta: captureMeta });
-          }
-
           try {
-              let response = await originalFetch(...sendArgs);
+              const sendActual: typeof fetch = (actualResource, actualOptions) => {
+                  if (urlStr.includes('/chat/completions')) {
+                      const captureMeta = (sendArgs[1] as any)?.__sullyMeta || ambientMetaAtStart;
+                      apiRequestCaptureId = captureApiRequestOnce({ url: String(actualResource), body: actualOptions?.body, meta: captureMeta });
+                  }
+                  return originalFetch.call(window, actualResource, actualOptions);
+              };
+              let response = await fetchWithClaudeTransport(sendActual, ...sendArgs);
 
               // /chat/completions 是可能已经开始计费的请求。拿到任何 HTTP 响应后都不在
               // 兼容层静默重发：中转站可能在返回错误前已经把任务交给上游，重发会让用户

@@ -297,6 +297,11 @@ const ApiCallLogModal: React.FC<ApiCallLogModalProps> = ({ isOpen, onClose }) =>
                                     {e.durationMs != null && (
                                         <Field label="耗时" value={e.durationMs >= 1000 ? `${(e.durationMs / 1000).toFixed(1)}s` : `${e.durationMs}ms`} />
                                     )}
+                                    {(e.cacheReadTokens != null || e.cacheWriteTokens != null) && (
+                                        <div className="text-[10px] text-emerald-600 mt-1">
+                                            缓存读取 {(e.cacheReadTokens ?? 0).toLocaleString('en-US')} · 写入 {(e.cacheWriteTokens ?? 0).toLocaleString('en-US')} token（包含在输入总量中）
+                                        </div>
+                                    )}
                                     {(e.totalTokens != null || e.promptTokens != null || e.completionTokens != null) && (
                                         <div className="col-span-2 flex items-baseline gap-1.5 min-w-0">
                                             <span className="text-[10px] text-slate-400 shrink-0">Token</span>

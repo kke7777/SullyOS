@@ -77,7 +77,9 @@ for (const w of WORKERS) {
   }
 
   for (const out of outputs) {
-    await build({ ...workerBundleOptions, entryPoints: [entry], outfile: out, banner: workerBundleBanner });
+    await build({ ...workerBundleOptions, entryPoints: [entry], outfile: out, banner: workerBundleBanner,
+      ...(w.name === 'amsg' ? { inject: [resolve(root, 'worker/amsg/nativeFetch.ts')] } : {}),
+    });
   }
 
   const sizeRef = outWorker || outPublic;

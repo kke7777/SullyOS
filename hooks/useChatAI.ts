@@ -1,3 +1,4 @@
+import { isClaudeNativeUrl } from '../utils/claudeTransport';
 import { resolveDialogueApi } from '../utils/characterApi';
 import { createReplyRun, withReplyCancellation } from '../utils/chatReplyCancellation';
 
@@ -811,8 +812,12 @@ export const useChatAI = ({
             // unverified，两种都留在本地跑。只剩恢复期提示（afterglow）的回合不需要信封，
             // 任何 Worker 都跑得了，不探也不拦。
             const instantChatReadiness = await replyStep(async () => resolveInstantChatReadiness(char, {
-                ensureBundleVersion: sarModulePlan.requiresEnvelope,
+                ensureBundleVersion: sarModulePlan.requiresEnvelope || isClaudeNativeUrl(effectiveApi.baseUrl),
             }));
+            if (isClaudeNativeUrl(effectiveApi.baseUrl) && instantChatReadiness.ready
+                && instantChatReadiness.workerBundleCurrent !== true) {
+                throw new Error('Claude 原生缓存需要新版 Worker：请在主动消息 2.0 设置里更新 Worker 并重新连接，再发送消息。');
+            }
             const instantChatOn = instantChatReadiness.ready;
             // 只在 ready 时判：没 ready 的那几档（含 config-unreadable）各有自己的收场，
             // 这里再挂一个否决会把「配置读不出来就明确报错」那档错判成「本来就不走即时对话」。
@@ -1114,7 +1119,7 @@ export const useChatAI = ({
                 model: baseReqBody.model || '',
             })) {
                 const m: string = baseReqBody.model || '';
-                if (/^claude-/i.test(m) && !/-thinking$/i.test(m)) {
+                if (/^claude-/i.test(m) && !/-thinking$/i.test(m) && !isClaudeNativeUrl(effectiveApi.baseUrl)) {
                     baseReqBody.model = `${m}-thinking`;
                 }
                 baseReqBody.thinking = { type: 'enabled', budget_tokens: 4000 };
@@ -1199,6 +1204,7 @@ export const useChatAI = ({
              * 打架，角色于是把同一条再排一遍；攒进历史的话则是好几份互相矛盾的旧清单叠着。
              * 现算 + 只留一份，角色每轮读到的都是自己名下真实的任务，本轮刚排的还会被点名。
              */
+            let nativeTaskContextInitialized = false;
             const withAmsg2TaskContext = (messages: any[]): any[] => {
                 if (!amsg2ToolsInjected) return messages;
                 const now = Date.now();
@@ -1226,8 +1232,17 @@ export const useChatAI = ({
                 // 排在今晚的事会被当成本轮就该催的事（「书看到哪了」每轮问一遍的由来）。
                 // 插入点在本轮用户消息之后，前缀缓存的断点更靠前，命中率一个 token 都不受影响。
                 // 工具循环的 loopMessages 是 baseReqBody.messages 追加尾巴，前缀没动，下标照用。
+                if (isClaudeNativeUrl(effectiveApi.baseUrl)) {
+                    // A signed thinking/tool round must retain everything before it byte-for-byte.
+                    // Keep the original task snapshot and append later live updates after tool results.
+                    if (nativeTaskContextInitialized) return [...messages, block];
+                    nativeTaskContextInitialized = true;
+                }
                 return insertAmsg2TaskContextBlock(messages, block, payload.volatileTailIndex);
             };
+            if (isClaudeNativeUrl(effectiveApi.baseUrl) && !instantChatRoute) {
+                baseReqBody.messages = withAmsg2TaskContext(baseReqBody.messages);
+            }
 
             // ─── 即时对话（主动消息 2.0 云端生成）分支 ───
             // 这一轮的上下文 + 任务一个 POST 上云，云端跑完走推送回来（收件箱同一条管线入库），
@@ -1390,7 +1405,8 @@ export const useChatAI = ({
                 data = await replyStep(async () => safeFetchJson(`${baseUrl}/chat/completions`, {
                     signal: replyRun.signal,
                     method: 'POST', headers,
-                    body: JSON.stringify({ ...baseReqBody, messages: withAmsg2TaskContext(baseReqBody.messages) })
+                    body: JSON.stringify({ ...baseReqBody, messages: isClaudeNativeUrl(effectiveApi.baseUrl)
+                        ? baseReqBody.messages : withAmsg2TaskContext(baseReqBody.messages) })
                 }, 2, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: '聊天回复' }, streamHooks));
             } catch (e) {
                 replyRun.check();
@@ -1572,8 +1588,8 @@ export const useChatAI = ({
                     }
                     // 让 char 继续生成文字补充 (不再带 tools, 避免无限调)
                     const followBody = { ...baseReqBody, messages: loopMessages };
-                    delete followBody.tools;
-                    delete followBody.tool_choice;
+                    if (isClaudeNativeUrl(effectiveApi.baseUrl)) followBody.tool_choice = 'none';
+                    else { delete followBody.tools; delete followBody.tool_choice; }
                     data = await replyStep(async () => safeFetchJson(`${baseUrl}/chat/completions`, {
                         signal: replyRun.signal,
                         method: 'POST', headers,
@@ -1677,8 +1693,8 @@ export const useChatAI = ({
                         }
                     }
                     const followBody = { ...baseReqBody, messages: loopMessages };
-                    delete followBody.tools;
-                    delete followBody.tool_choice;
+                    if (isClaudeNativeUrl(effectiveApi.baseUrl)) followBody.tool_choice = 'none';
+                    else { delete followBody.tools; delete followBody.tool_choice; }
                     data = await replyStep(async () => safeFetchJson(`${baseUrl}/chat/completions`, {
                         signal: replyRun.signal,
                         method: 'POST', headers,
@@ -1858,10 +1874,11 @@ export const useChatAI = ({
                                 : `[系统消息：工具阶段${stalled ? '连续两轮没有产生新结果' : '已到本轮安全上限'}。请停止调用工具，基于已经拿到的结果直接用角色语气回复；如目标仍未完成，请如实说明卡在哪一步。不要输出工具名、参数或这条系统消息。]`,
                         });
                     }
+                    if (isClaudeNativeUrl(effectiveApi.baseUrl)) loopMessages = [...followMessages];
                     const followBody = { ...baseReqBody, messages: followMessages };
                     if (forceWrapUp) {
-                        delete followBody.tools;
-                        delete followBody.tool_choice;
+                        if (isClaudeNativeUrl(effectiveApi.baseUrl)) followBody.tool_choice = 'none';
+                        else { delete followBody.tools; delete followBody.tool_choice; }
                     }
                     data = await replyStep(async () => safeFetchJson(`${baseUrl}/chat/completions`, {
                         signal: replyRun.signal,
@@ -1887,8 +1904,8 @@ export const useChatAI = ({
                         ...baseReqBody,
                         messages: [...withAmsg2TaskContext(loopMessages), { role: 'user', content: AMSG2_EMPTY_REPLY_PROMPT }],
                     };
-                    delete (rescueBody as any).tools;
-                    delete (rescueBody as any).tool_choice;
+                    if (isClaudeNativeUrl(effectiveApi.baseUrl)) (rescueBody as any).tool_choice = 'none';
+                    else { delete (rescueBody as any).tools; delete (rescueBody as any).tool_choice; }
                     data = await replyStep(async () => safeFetchJson(`${baseUrl}/chat/completions`, {
                         signal: replyRun.signal,
                         method: 'POST', headers,

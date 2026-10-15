@@ -41,3 +41,5 @@ URL / Key / Model 整套选择，禁止逐字段从不同配置补齐。空 Key 
 `pnpm vitest run utils/characterApi.test.ts utils/characterApiPanel.test.ts utils/amsgLlmCredentials.test.ts utils/amsgStateSync.test.ts utils/apiPresetSwitch.test.ts utils/apiPresetSwitch.wiring.test.ts utils/characterCard.test.ts`
 
 本地可视验收页：`/test/fixtures/character-api.html`。点击「加载演示配置」只写入该预览站点的虚构配置，不调用真实模型。可验证预设分组、保存 / 取消、跟随全局、跨页名单和窄屏布局。
+
+Claude 原生接口与缓存：同一配置表单可选择以 `/messages` 结尾的原生 endpoint，URL 会随上述配置快照原样保存，详见 [提示词缓存](./claude-prompt-cache.md)。

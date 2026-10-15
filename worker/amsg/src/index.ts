@@ -2666,6 +2666,8 @@ export const amsgHooks = {
             lastMeta.amsgUsage = {
               ...(promptTokens !== undefined ? { promptTokens } : {}),
               ...(completionTokens !== undefined ? { completionTokens } : {}),
+              cacheReadTokens: pick('cache_read_input_tokens'),
+              cacheWriteTokens: pick('cache_creation_input_tokens'),
             };
           }
         }
