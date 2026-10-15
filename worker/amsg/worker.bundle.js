@@ -34,7 +34,7 @@ function clampClaudeTemperature(body) {
 }
 
 // utils/claudeTransport.ts
-var CACHE = { type: "ephemeral" };
+var CACHE = { type: "ephemeral", ttl: "1h" };
 var isClaudeNativeUrl = (url) => /\/messages(?:\/(?:chat\/completions|models))?\/*$/i.test(url);
 function inlineSystemSupported(model) {
   return /(?:opus[-.]?(?:5(?:[-.]5)?|4[-.]8)|sonnet[-.]5[-.]5|haiku[-.]5[-.]5|fable[-.]5|mythos[-.]5)(?:\b|[-.])/i.test(model);

@@ -18,9 +18,9 @@ export default function DialogueApiFields({ value, onChange, fetchModels, isLoad
                         onChange={e => setLocalUrl(selectClaudeEndpoint(localUrl, e.target.value === 'claude'))}
                         className="w-full bg-white/50 border border-slate-200/60 rounded-xl px-4 py-2.5 text-sm">
                         <option value="openai">OpenAI 兼容接口</option>
-                        <option value="claude">Claude 原生接口 · 5 分钟缓存</option>
+                        <option value="claude">Claude 原生接口 · 1 小时缓存</option>
                     </select>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">Claude 原生地址以 /v1/messages 结尾。首次写入缓存可能更贵，后续命中才享受渠道的缓存价格；用量可在 API 调用记录查看。使用主动消息或云端即时对话时，请先更新并连接新版 Worker。</p>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">Claude 原生地址以 /v1/messages 结尾。一小时缓存首次写入按官方规则为普通输入价的 2 倍，实际以渠道计费为准；后续命中才享受渠道的缓存价格；用量可在 API 调用记录查看。使用主动消息或云端即时对话时，请先更新并连接新版 Worker。</p>
                 </div>
                 <div className="group">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">URL</label>

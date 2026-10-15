@@ -22,9 +22,9 @@ describe('Claude native transport', () => {
     it('writes stable system and history before the changing live suffix; does not mutate callers', () => {
         const input = request(); const before = JSON.stringify(input);
         const body = buildClaudeRequest(input);
-        expect(body.system).toEqual([{ type: 'text', text: messages[0].content, cache_control: { type: 'ephemeral' } }]);
+        expect(body.system).toEqual([{ type: 'text', text: messages[0].content, cache_control: { type: 'ephemeral', ttl: '1h' } }]);
         expect(body.messages).toEqual([
-            { role: 'user', content: [{ type: 'text', text: '你好', cache_control: { type: 'ephemeral' } }] },
+            { role: 'user', content: [{ type: 'text', text: '你好', cache_control: { type: 'ephemeral', ttl: '1h' } }] },
             { role: 'system', content: [{ type: 'text', text: 'live time 12:00' }] },
         ]);
         const later = buildClaudeRequest(request({ messages: [messages[0], messages[1],
@@ -80,7 +80,7 @@ describe('Claude native transport', () => {
         expect(sent.headers.get('x-api-key')).toBe('private-key');
         expect(sent.headers.get('authorization')).toBeNull();
         expect(sent.signal).toBe(signal);
-        expect(JSON.parse(sent.body).system[0].cache_control).toBeDefined();
+        expect(JSON.parse(sent.body).system[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
         expect((await response.json()).choices[0].message.content).toBe('你好呀');
         await fetchWithClaudeTransport(fetcher, 'https://other.test/v1/chat/completions', init);
         expect(fetcher.mock.calls[1]).toEqual(['https://other.test/v1/chat/completions', init]);

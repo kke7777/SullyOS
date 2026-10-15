@@ -24,6 +24,6 @@ it('the bundled amsg dependency calls the native transport without changing the 
     expect(reply.response.usage.cache_read_input_tokens).toBe(2000);
     expect(fake).toHaveBeenCalledTimes(1);
     expect(fake.mock.calls[0][0]).toBe('https://relay.test/v1/messages');
-    expect(JSON.parse((fake.mock.calls[0] as any)[1].body).system[0].cache_control.type).toBe('ephemeral');
+    expect(JSON.parse((fake.mock.calls[0] as any)[1].body).system[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(globalThis.fetch).toBe(fake);
 });

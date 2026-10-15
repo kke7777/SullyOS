@@ -1,11 +1,11 @@
-/** Opt-in transport: a saved URL ending in /messages selects Claude native + 5m caching.
+/** Opt-in transport: a saved URL ending in /messages selects Claude native + 1h caching.
  * Keeping the selection in the endpoint preserves existing preset/backup/credential contracts.
  * All OpenAI-shaped callers keep their internal format; only the network boundary translates.
  */
 import { clampClaudeTemperature, modelRejectsSamplingParams, stripSamplingParams } from './samplingParamCompat';
 
 type Obj = Record<string, any>;
-const CACHE = { type: 'ephemeral' };
+const CACHE = { type: 'ephemeral', ttl: '1h' };
 export const isClaudeNativeUrl = (url: string): boolean => /\/messages(?:\/(?:chat\/completions|models))?\/*$/i.test(url);
 export function selectClaudeEndpoint(url: string, native: boolean): string {
     const base = url.trim().replace(/\/+$/, '').replace(/\/(?:chat\/completions|messages)$/i, '');
