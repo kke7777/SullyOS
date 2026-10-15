@@ -1239,6 +1239,21 @@ export const DB = {
     });
   },
 
+  // Album imports must never replace an existing name, including concurrent imports.
+  addEmoji: async (name: string, url: string, categoryId?: string): Promise<void> => {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_EMOJIS, 'readwrite');
+      transaction.objectStore(STORE_EMOJIS).add({ name, url, categoryId });
+      transaction.oncomplete = () => resolve();
+      const fail = () => reject(transaction.error?.name === 'ConstraintError'
+        ? new Error('已有同名表情包，请换一个名称')
+        : transaction.error || new Error('表情包保存失败，请重试'));
+      transaction.onerror = fail;
+      transaction.onabort = fail;
+    });
+  },
+
   deleteEmoji: async (name: string): Promise<void> => {
     const db = await openDB();
     const transaction = db.transaction(STORE_EMOJIS, 'readwrite');

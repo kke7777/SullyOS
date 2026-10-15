@@ -7,6 +7,7 @@ import { stopInstantChat } from '../utils/amsgInstantChat';
 import {resolvePsycheAppearance} from '../utils/psycheAppearance';
 import { startsNewMessageGroup } from '../utils/chatMessageGrouping';
 import EmojiExportDialog from '../components/chat/EmojiExportDialog';
+import { importLocalEmoji } from '../utils/emojiImport';
 import BlobRefStyle from '../components/chat/BlobRefStyle';
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -2274,6 +2275,15 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         addToast('分类创建成功', 'success');
     };
 
+    const handleImportEmojiImage = async (file: File, name: string) => {
+        const targetCatId = activeCategory === 'default' ? undefined : activeCategory;
+        await importLocalEmoji(file, name, targetCatId);
+        markEmojiLibraryChanged();
+        await loadEmojiData();
+        setModalType('none');
+        addToast('表情包添加成功', 'success');
+    };
+
     const handleImportEmoji = async () => {
         if (!emojiImportText.trim()) return;
         const lines = emojiImportText.split('\n');
@@ -3884,6 +3894,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
 
                 onTransfer={() => { if(transferAmt) handleSendText(`[转账]`, 'transfer', { amount: transferAmt, note: transferNote.trim() || undefined, status: 'pending' }); setTransferNote(''); setModalType('none'); }}
                 onImportEmoji={handleImportEmoji}
+                onImportEmojiImage={handleImportEmojiImage} emojiNames={emojis.map(emoji => emoji.name)}
                 onSaveSettings={saveSettings}
                 onOpenHistoryCleanup={() => { setModalType('none'); setShowHistoryCleanup(true); }} onArchive={handleFullArchive}
                 onCreatePrompt={createNewPrompt} onEditPrompt={editSelectedPrompt} onSavePrompt={handleSavePrompt} onDeletePrompt={handleDeletePrompt}

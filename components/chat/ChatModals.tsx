@@ -2,6 +2,7 @@
 import React, { useRef, useState } from 'react';
 import Modal from '../os/Modal';
 import TokenImg from '../os/TokenImg';
+import EmojiImportDialog from './EmojiImportDialog';
 import { CharacterProfile, Message, EmojiCategory, DailySchedule, ScheduleSlot, ApiPreset, APIConfig } from '../../types';
 import ScheduleCard from '../schedule/ScheduleCard';
 import EmotionSettingsPanel from './EmotionSettingsPanel';
@@ -71,6 +72,8 @@ interface ChatModalsProps {
     // Handlers
     onTransfer: () => void;
     onImportEmoji: () => void;
+    onImportEmojiImage: (file: File, name: string) => Promise<void>;
+    emojiNames: string[];
     onSaveSettings: () => void;
     onOpenHistoryCleanup?: () => void;
     onArchive: () => void;
@@ -259,7 +262,7 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     selectedMessage, selectedEmoji, selectedCategory, activeCharacter, messages,
     allHistoryMessages = [],
     contextRangeSnapshot,
-    onTransfer, onImportEmoji, onSaveSettings,
+    onTransfer, onImportEmoji, onImportEmojiImage, emojiNames, onSaveSettings,
     onOpenHistoryCleanup,
     onArchive, onCreatePrompt, onEditPrompt, onSavePrompt, onDeletePrompt,
     onSetHistoryStart, onRestoreAdaptiveContext, onJumpToMessageInChat, onEnterSelectionMode, onReplyMessage, onEditMessageStart, onConfirmEditMessage, onDeleteMessage, onCopyMessage, onToggleMessageFavorite, messageFavorited, onDeleteEmoji, onDeleteCategory, onRenameCategory, onDownloadCategory,
@@ -379,15 +382,10 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                 />
             </Modal>
 
-            <Modal 
-                isOpen={modalType === 'emoji-import'} title="表情注入" onClose={() => setModalType('none')}
-                footer={<button onClick={onImportEmoji} className="w-full py-4 bg-primary text-white font-bold rounded-2xl">添加至当前分类</button>}
-            >
-                <div className="space-y-3">
-                    <p className="text-xs text-slate-400">表情将导入到你当前选中的分类。</p>
-                    <textarea value={emojiImportText} onChange={e => setEmojiImportText(e.target.value)} placeholder="Name--URL (每行一个)" className="w-full h-40 bg-slate-100 rounded-2xl p-4 resize-none" />
-                </div>
-            </Modal>
+            {modalType === 'emoji-import' && <EmojiImportDialog
+                existingNames={emojiNames} linkText={emojiImportText} onLinkTextChange={setEmojiImportText}
+                onImportLinks={onImportEmoji} onImportImage={onImportEmojiImage} onClose={() => setModalType('none')}
+            />}
 
             <Modal 
                 isOpen={modalType === 'chat-settings'} title="聊天设置" onClose={() => setModalType('none')}
