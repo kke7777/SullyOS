@@ -654,6 +654,8 @@ export const settleInstantChatApiLog = (uuid: string, metadata?: Record<string, 
     ok: !isReplyStopped(uuid),
     promptTokens: num(usage?.promptTokens),
     completionTokens: num(usage?.completionTokens),
+    cacheReadTokens: num(usage?.cacheReadTokens),
+    cacheWriteTokens: num(usage?.cacheWriteTokens),
     tokensPartial: Array.isArray(toolTrace) && toolTrace.length > 0,
   });
 };

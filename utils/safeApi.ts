@@ -130,6 +130,7 @@ class SseAssembler {
     // 且 extractContent / extractAssistantText 的 reasoning 兜底全部失效(思考模型把全部
     // 输出塞进 reasoning 时表现为空回复→重试→巨慢)。2026-07 全局流式上线后被放大成必现。
     private reasoning = '';
+    private claudeThinking: any[] | undefined;
     // 取证探针: 记录本条流里 delta 出现过的字段名。渠道的思考字段形状五花八门,
     // 与其一轮一轮猜, 不如把名单打出来(finish() 附带 + 控制台一行)一次看清。
     private deltaKeys = new Set<string>();
@@ -157,6 +158,7 @@ class SseAssembler {
         let reasoningDelta = '';
         // delta 路径（OpenAI 流式常见）
         if (choice.delta) {
+            if (Array.isArray(choice.delta.__claude_thinking)) this.claudeThinking = choice.delta.__claude_thinking;
             for (const k of Object.keys(choice.delta)) this.deltaKeys.add(k);
             if (typeof choice.delta.content === 'string') {
                 delta = choice.delta.content;
@@ -233,7 +235,7 @@ class SseAssembler {
                     content: this.content,
                     ...(this.reasoning ? { reasoning_content: this.reasoning } : {}),
                     ...(this.toolCalls.length ? {
-                        tool_calls: this.toolCalls.filter(Boolean).map((tc, i) => ({ ...tc, id: tc.id || `call_sse_${i}` })),
+                        tool_calls: this.toolCalls.filter(Boolean).map((tc, i) => ({ ...tc, id: tc.id || `call_sse_${i}`, ...(i === 0 && this.claudeThinking ? { __claude_thinking: this.claudeThinking } : {}) })),
                     } : {}),
                 },
                 finish_reason: this.finishReason,

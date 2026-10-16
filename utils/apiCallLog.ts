@@ -89,6 +89,8 @@ export interface ApiCallLogEntry extends ApiCallMeta {
     completionTokens?: number;
     /** 总 token（total_tokens） */
     totalTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
     /** 请求从发起到响应 / 报错的耗时 ms（NetworkError 类失败时 = 等了多久才断） */
     durationMs?: number;
     /**
@@ -155,6 +157,8 @@ export interface ApiRequestCapture {
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
     usageStatus?: 'pending' | 'reported' | 'not-reported' | 'failed';
     messageCount: number;
     binaryPlaceholders: number;
@@ -305,7 +309,7 @@ function resolvePresetName(baseUrl: string, model: string): string {
  * 在 safeFetchJson 里对 `/chat/completions` 的成功与失败都会调用。
  */
 /** 从 OpenAI 兼容响应里抠 usage（各家代理大多遵循这个字段）。 */
-export function extractApiTokenUsage(response: unknown): { prompt?: number; completion?: number; total?: number } {
+export function extractApiTokenUsage(response: unknown): { prompt?: number; completion?: number; total?: number; cacheRead?: number; cacheWrite?: number } {
     const root = response as any;
     const usage = root?.usage || root?.usage_metadata || root?.usageMetadata;
     if (!usage || typeof usage !== 'object') return {};
@@ -314,6 +318,8 @@ export function extractApiTokenUsage(response: unknown): { prompt?: number; comp
         prompt: num(usage.prompt_tokens ?? usage.input_tokens ?? usage.promptTokenCount),
         completion: num(usage.completion_tokens ?? usage.output_tokens ?? usage.candidatesTokenCount),
         total: num(usage.total_tokens ?? usage.totalTokenCount),
+        cacheRead: num(usage.prompt_tokens_details?.cached_tokens ?? usage.cache_read_input_tokens),
+        cacheWrite: num(usage.cache_creation_input_tokens),
     };
 }
 
@@ -479,7 +485,8 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
         if (typeof body === 'string') {
             try { parsed = JSON.parse(body); } catch { return undefined; }
         }
-        const messages = parsed?.messages;
+        const messages = parsed?.system !== undefined && Array.isArray(parsed?.messages)
+            ? [{ role: 'system', content: parsed.system }, ...parsed.messages] : parsed?.messages;
         if (!Array.isArray(messages) || messages.length === 0) return undefined;
 
         const out: PromptBlockStat[] = [];
@@ -700,7 +707,7 @@ export function buildApiRequestCapture(input: {
         : { rawBody: payload };
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const sections: ApiRequestCaptureSection[] = [];
-    const requestOptions = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'messages' && key !== 'tools'));
+    const requestOptions = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'messages' && key !== 'tools' && key !== 'system'));
     if (Object.keys(requestOptions).length > 0) {
         sections.push({
             id: 'request-options',
@@ -722,6 +729,10 @@ export function buildApiRequestCapture(input: {
         });
     }
 
+    if (body.system !== undefined) {
+        sections.push({ id: 'native-system', label: '系统设定（Claude system）', kind: 'system',
+            chars: contentToText(body.system).length, path: 'system', role: 'system', messageIndex: -1 });
+    }
     messages.forEach((rawMessage, messageIndex) => {
         const message: Record<string, unknown> = rawMessage && typeof rawMessage === 'object' ? rawMessage as Record<string, unknown> : { content: rawMessage };
         const role = typeof message.role === 'string' ? message.role : 'unknown';
@@ -793,9 +804,10 @@ export function getApiRequestCaptureSectionContent(
             ? capture.payload as Record<string, unknown>
             : { rawBody: capture.payload };
         if (section.kind === 'request') {
-            return JSON.stringify(Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'messages' && key !== 'tools')), null, 2);
+            return JSON.stringify(Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'messages' && key !== 'tools' && key !== 'system')), null, 2);
         }
         if (section.kind === 'tools') return JSON.stringify(body.tools, null, 2);
+        if (section.messageIndex === -1) return contentToText(body.system);
         const messages = Array.isArray(body.messages) ? body.messages : [];
         const message = messages[section.messageIndex ?? -1] as any;
         if (!message) return '';
@@ -964,6 +976,8 @@ export function updateApiRequestCaptureUsage(input: {
             promptTokens: usage.prompt,
             completionTokens: usage.completion,
             totalTokens: usage.total,
+            cacheReadTokens: usage.cacheRead,
+            cacheWriteTokens: usage.cacheWrite,
             usageStatus: !input.ok ? 'failed' : usage.prompt != null ? 'reported' : 'not-reported',
         };
         const pending = captureSaveInFlight?.id === input.captureId
@@ -1020,6 +1034,8 @@ export function recordApiCall(input: {
             promptTokens: usage.prompt,
             completionTokens: usage.completion,
             totalTokens: usage.total,
+            cacheReadTokens: usage.cacheRead,
+            cacheWriteTokens: usage.cacheWrite,
             durationMs: input.durationMs,
             promptBreakdown: buildPromptBreakdown(input.body),
             appId: meta.appId,
@@ -1109,6 +1125,8 @@ export function settleCloudApiCall(input: {
     ok: boolean;
     promptTokens?: number;
     completionTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
     /** 见 ApiCallLogEntry.tokensPartial。 */
     tokensPartial?: boolean;
     /** 见 ApiCallLogEntry.superseded。 */
@@ -1123,6 +1141,8 @@ export function settleCloudApiCall(input: {
             superseded: input.superseded || undefined,
             promptTokens,
             completionTokens,
+            cacheReadTokens: input.cacheReadTokens,
+            cacheWriteTokens: input.cacheWriteTokens,
             // 云端只报入和出两个数，总数这边自己加——列表顶上的合计读的是这个字段。
             totalTokens: promptTokens != null && completionTokens != null
                 ? promptTokens + completionTokens

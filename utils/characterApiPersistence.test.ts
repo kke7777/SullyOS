@@ -79,6 +79,8 @@ it.each(['full', 'text_only'] as const)('%s ZIP restores role credentials and pr
     try {
         for (const [value, override, expected] of [
             [char, undefined, roleApi],
+            [{ ...char, dialogueApi: { ...roleApi, baseUrl: 'https://role.test/v1/messages', model: 'claude-opus-5-5' } }, undefined,
+                { ...roleApi, baseUrl: 'https://role.test/v1/messages', model: 'claude-opus-5-5' }],
             [char, appApi, { ...globalApi, ...appApi }],
             [{ ...char, dialogueApi: undefined }, undefined, globalApi],
         ] as const) {

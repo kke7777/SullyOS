@@ -1,3 +1,4 @@
+import { isClaudeNativeUrl, selectClaudeEndpoint } from '../../utils/claudeTransport';
 import React, { useState } from 'react';
 import type { DialogueApiConfig } from '../../types';
 
@@ -11,6 +12,16 @@ export default function DialogueApiFields({ value, onChange, fetchModels, isLoad
  const setLocalKey = (apiKey: string) => onChange({ apiKey });
  const setLocalTemperature = (temperature: number) => onChange({ temperature });
  return <div className="space-y-4">
+                <div className="space-y-1.5">
+                    <label className="text-xs text-slate-500" htmlFor="dialogue-protocol">接口方式</label>
+                    <select id="dialogue-protocol" value={isClaudeNativeUrl(localUrl) ? 'claude' : 'openai'}
+                        onChange={e => setLocalUrl(selectClaudeEndpoint(localUrl, e.target.value === 'claude'))}
+                        className="w-full bg-white/50 border border-slate-200/60 rounded-xl px-4 py-2.5 text-sm">
+                        <option value="openai">OpenAI 兼容接口</option>
+                        <option value="claude">Claude 原生接口 · 1 小时缓存</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">Claude 原生地址以 /v1/messages 结尾。一小时缓存首次写入按官方规则为普通输入价的 2 倍，实际以渠道计费为准；后续命中才享受渠道的缓存价格；用量可在 API 调用记录查看。使用主动消息或云端即时对话时，请先更新并连接新版 Worker。</p>
+                </div>
                 <div className="group">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">URL</label>
                     <input type="text" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} placeholder="https://..." className="w-full bg-white/50 border border-slate-200/60 rounded-xl px-4 py-2.5 text-sm font-mono focus:bg-white transition-all" />
