@@ -46,6 +46,9 @@ it.each([false,true])('adds home phone background only to this request (worker=%
     expect(phone.cleanedApiMessages.some(m=>m.role==='user'&&String(m.content).includes('在吗'))).toBe(true);
     const normal=await buildChatRequestPayload(input);
     expect(joinMessages(normal.fullMessages)).not.toContain(background);
+    expect(joinMessages(normal.fullMessages)).not.toContain('表达底线');
+    expect(joinMessages(normal.fullMessages)).not.toContain('珍贵的素材');
+    expect(joinMessages(normal.fullMessages)).toContain('### 最后，回到你自己');
     expect(input.char).not.toHaveProperty('homePhoneContext');
 });
 

@@ -6,7 +6,7 @@ import { ContextBuilder } from './context';
 // 而用户往人设/世界书里怎么写都盖不过它。这句框定跟着时间一起注入，钉住它别丢。
 //
 // 措辞刻意全正向（只说时间该起什么作用，不点名任何要避开的话术）——把禁语写进
-// 提示词反而会激活它，同 context.ts 里「表达底线」的设计。
+// 提示词反而会激活它。
 
 const charAt = (timeAwarenessEnabled?: boolean) => ({
     id: 'char-time',
