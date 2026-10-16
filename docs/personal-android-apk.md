@@ -52,7 +52,7 @@ pnpm build:android
 - `NUOMI_KEY_ALIAS`：密钥名称。
 - `NUOMI_KEY_PASSWORD`：密钥密码。
 
-本次聊天生图版本的 Android versionCode 为 6（1.5-chat-images），沿用原包的包名与签名，可以覆盖安装。
+本次聊天生图版本的 Android versionCode 为 7（1.5.1-image-models），支持拉取、搜索并点选生图模型自动填入，沿用原包的包名与签名，可以覆盖安装。
 后续覆盖升级须使用同一签名并递增 versionCode。签名文件和密码不提交到仓库。
 本 APK 没有原作者的 ApkInstaller 插件，因此不接入原作者 APK 自动更新地址；更新包可手动覆盖安装。
 

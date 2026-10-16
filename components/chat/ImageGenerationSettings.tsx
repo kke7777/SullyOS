@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useOS } from '../../context/OSContext';
 import { ImageGenerationConfig, ImageReference, normalizeImageConfig, validateImageConfig } from '../../utils/imageGeneration';
 import { putImageBlob } from '../../utils/blobRef';
 import TokenImg from '../os/TokenImg';
+import ModelPicker from '../settings/ModelPicker';
+import { fetchImageModels } from '../../utils/imageModelList';
 
 export default function ImageGenerationSettings({ charId, onSaved }: { charId?: string; onSaved?: () => void }) {
     const { apiConfig, updateApiConfig, characters, updateCharacter, addToast } = useOS();
@@ -11,7 +13,40 @@ export default function ImageGenerationSettings({ charId, onSaved }: { charId?: 
     const [enabled, setEnabled] = useState(char?.chatImageGenerationEnabled === true);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const change = <K extends keyof ImageGenerationConfig>(key: K, value: ImageGenerationConfig[K]) => setDraft(d => ({ ...d, [key]: value }));
+    const [models, setModels] = useState<string[]>([]);
+    const [showModels, setShowModels] = useState(false);
+    const [loadingModels, setLoadingModels] = useState(false);
+    const [modelError, setModelError] = useState('');
+    const modelRequest = useRef<AbortController | null>(null);
+    useEffect(() => () => modelRequest.current?.abort(), []);
+    const change = <K extends keyof ImageGenerationConfig>(key: K, value: ImageGenerationConfig[K]) => {
+        if (key === 'baseUrl' || key === 'apiKey') {
+            modelRequest.current?.abort();
+            modelRequest.current = null;
+            setLoadingModels(false);
+            setModels([]);
+            setShowModels(false);
+            setModelError('');
+        }
+        setDraft(d => ({ ...d, [key]: value }));
+    };
+    const loadModels = async () => {
+        modelRequest.current?.abort();
+        const request = new AbortController();
+        modelRequest.current = request;
+        setLoadingModels(true);
+        setModelError('');
+        try {
+            const result = await fetchImageModels(draft, request.signal);
+            if (request.signal.aborted || modelRequest.current !== request) return;
+            setModels(result);
+            setShowModels(true);
+        } catch (e: any) {
+            if (!request.signal.aborted && modelRequest.current === request) setModelError(e.message || '模型拉取失败');
+        } finally {
+            if (modelRequest.current === request) setLoadingModels(false);
+        }
+    };
     const editReference = (id: string, patch: Partial<ImageReference>) => setDraft(d => ({ ...d, references: d.references.map(r => r.id === id ? { ...r, ...patch } : r) }));
     const upload = async (file?: File) => {
         if (!file) return;
@@ -54,6 +89,15 @@ export default function ImageGenerationSettings({ charId, onSaved }: { charId?: 
         <label className="block space-y-1 text-xs font-bold">API Key<input aria-label="生图 API Key" type="password" autoComplete="new-password" value={draft.apiKey} onChange={e => change('apiKey', e.target.value)} className={field} /></label>
         <label className="block space-y-1 text-xs font-bold">模型名称<input aria-label="生图模型" list="nuomi-image-models" value={draft.model} onChange={e => change('model', e.target.value)} className={field} /></label>
         <datalist id="nuomi-image-models">{['[0.15]gpt-image-2', '[0.15]gpt-image-2.5-flare', '[0.15]gpt-image-2.5-sunburst'].map(m => <option key={m} value={m} />)}</datalist>
+        <div className="flex gap-2">
+            <button type="button" disabled={loadingModels} onClick={() => void loadModels()} className="rounded-xl bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50">{loadingModels ? '正在拉取…' : models.length ? '刷新模型列表' : '拉取模型'}</button>
+            {models.length > 0 && <button type="button" aria-expanded={showModels} onClick={() => setShowModels(v => !v)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-700">{showModels ? '收起模型列表' : `选择模型（${models.length}）`}</button>}
+        </div>
+        {modelError && <p role="alert" className="text-xs text-rose-600">{modelError}</p>}
+        {showModels && <div className="rounded-2xl border border-slate-200 p-2">
+            <p className="mb-2 text-[11px] text-slate-500">已拉取 {models.length} 个模型，点击自动填入上方模型框。渠道可能同时返回聊天等其他模型，请选择支持生图的型号。</p>
+            <ModelPicker availableModels={models} localModel={draft.model} setLocalModel={model => change('model', model)} confirmModelPicker={model => { change('model', model); setShowModels(false); }} />
+        </div>}
         <p className="text-[11px] text-slate-400">模型名称完整保留渠道前缀。接口使用 OpenAI Images 标准，参考图走带图接口。</p>
         <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-xs font-bold">图片尺寸<select aria-label="生图尺寸" value={draft.size} onChange={e => change('size', e.target.value)} className={field}>
