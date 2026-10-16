@@ -52,7 +52,7 @@ pnpm build:android
 - `NUOMI_KEY_ALIAS`：密钥名称。
 - `NUOMI_KEY_PASSWORD`：密钥密码。
 
-本次相册表情版本的 Android versionCode 为 5（1.4-album-stickers），沿用原包的包名与签名，可以覆盖安装。
+本次聊天生图版本的 Android versionCode 为 6（1.5-chat-images），沿用原包的包名与签名，可以覆盖安装。
 后续覆盖升级须使用同一签名并递增 versionCode。签名文件和密码不提交到仓库。
 本 APK 没有原作者的 ApkInstaller 插件，因此不接入原作者 APK 自动更新地址；更新包可手动覆盖安装。
 
@@ -82,3 +82,10 @@ GIF 动图保留原始字节；无法预览的图片不能保存。同名表情�
 构建与自动化模拟测试不等同于真机端到端验收。录音、键盘、分享和实际后台推送需在手机上确认。
 
 参考：https://unifiedpush.org/kdoc/connector/ 、https://unifiedpush.org/developers/spec/android/
+
+## 聊天生图版本
+
+包含 2026-10-16 的异地聊天提示词、四节版生图指南和默认平涂日系二次元风格。
+使用方式及前台执行说明见 [聊天生图](image-generation.md)。保留相册表情、系统状态栏、语音和原生推送。
+安装后在「设置 → 生图 API」保存接口与人物参考图，在聊天功能面板开启当前会话生图。
+生图开关默认关闭；本功能不要求更新 Cloudflare Worker。
