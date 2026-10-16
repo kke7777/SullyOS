@@ -276,6 +276,8 @@ export interface VisionApiConfig {
 export type DialogueApiConfig = Pick<APIConfig, 'baseUrl' | 'apiKey' | 'model' | 'stream' | 'temperature'>;
 
 export interface APIConfig {
+  /** OpenAI Images 配置与参考图；只在会话显式开启生图时供主聊天请求使用。 */
+  imageGeneration?: import('./utils/imageGeneration').ImageGenerationConfig;
   baseUrl: string;
   apiKey: string;
   // 可选识图中转：给不支持 image_url 的主模型补视觉能力。
@@ -3050,6 +3052,7 @@ export interface CharacterProfile {
 
   // Chat & Date voice TTS settings
   chatVoiceEnabled?: boolean;
+  chatImageGenerationEnabled?: boolean;
   // 收到语音是否自动播放。默认关（不填 = 不自动播）：语音条照常出现，点一下才响。
   // 只管 AI 自动发来的语音；用户主动点「转换语音」/ 点空语音条生成的，仍然生成完就播。
   chatVoiceAutoPlay?: boolean;

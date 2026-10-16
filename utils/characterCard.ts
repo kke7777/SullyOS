@@ -46,6 +46,7 @@ export const CARD_STRIPPED_FIELDS = [
   'dateVoiceLang',
   'callVoiceLang',
   'chatVoiceEnabled',
+  'chatImageGenerationEnabled',
   'chatVoiceAutoPlay',
   'dateVoiceEnabled',
   'dateExtraPresets',        // 用户私有补充预设随系统备份保存，不随角色卡分享

@@ -18,6 +18,10 @@ import React, { useEffect, useState } from 'react';
 import { AMSG_INSTANT_CHAT_ROUTE_EVENT, type InstantChatRouteDetail } from '../../utils/amsgInstantChat';
 
 const NOTICES: Record<string, { title: string; hint: string }> = {
+    'image-generation': {
+        title: '聊天生图已开启',
+        hint: '本轮在手机前台执行，请等待图片返回',
+    },
     'worker-outdated': {
         title: '这一轮在本地生成',
         hint: '云端那台 Worker 跑不动这条路，去设置里更新一下',
