@@ -41,15 +41,15 @@ it('enabled feature labels each original reference and preserves the model prefi
 it.each(['https://example.test', 'https://example.test/v1/', 'https://example.test/v1/images/generations'])('normalizes the standard endpoint: %s', root => {
     expect(imageEndpoint(root, true)).toBe('https://example.test/v1/images/edits');
 });
-it('sends a single text-only JSON request with saved dimensions and quality', async () => {
-    const result = await generateImage(config(), { prompt: '戴帽子的猫', reference_ids: [] });
+it.each(['medium', 'xhigh'] as const)('sends a single text-only JSON request with saved %s quality', async quality => {
+    const result = await generateImage({ ...config(), quality }, { prompt: '戴帽子的猫', reference_ids: [] });
     const [url, init] = vi.mocked(fetch).mock.calls[0] as any;
     expect(url).toBe('https://api.sunflowerllm.com/v1/images/generations');
-    expect(JSON.parse(init.body)).toMatchObject({ model: config().model, size: '1024x1024', quality: 'medium', n: 1, stream: false });
+    expect(JSON.parse(init.body)).toMatchObject({ model: config().model, size: '1024x1024', quality, n: 1, stream: false });
     expect(result.blob.type).toBe('image/png'); expect(result.costUsd).toBe(0.12);
 });
 it('sends both original images through multipart edits in selected order, including the identity legend', async () => {
-    await generateImage(config(), { prompt: '两人拥抱', reference_ids: ['saki', 'loulou'] });
+    await generateImage({ ...config(), quality: 'xhigh' }, { prompt: '两人拥抱', reference_ids: ['saki', 'loulou'] });
     const [url, init] = vi.mocked(fetch).mock.calls[0] as any;
     expect(url.endsWith('/v1/images/edits')).toBe(true);
     expect(init.headers['Content-Type']).toBeUndefined();
@@ -57,6 +57,7 @@ it('sends both original images through multipart edits in selected order, includ
     expect(init.body.get('prompt')).toContain('参考图1：咲咲');
     expect(init.body.get('prompt')).toContain('参考图2：露露');
     expect(init.body.get('model')).toBe(config().model);
+    expect(init.body.get('quality')).toBe('xhigh');
 });
 it('does not send a paid request when a selected reference is unknown or missing', async () => {
     await expect(generateImage(config(), { prompt: '合照', reference_ids: ['unknown'] })).rejects.toThrow('未保存');

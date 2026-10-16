@@ -12,7 +12,7 @@ export interface ImageGenerationConfig {
     apiKey: string;
     model: string;
     size: string;
-    quality: 'auto' | 'low' | 'medium' | 'high';
+    quality: 'auto' | 'low' | 'medium' | 'high' | 'xhigh';
     references: ImageReference[];
 }
 export const DEFAULT_IMAGE_CONFIG: ImageGenerationConfig = {
@@ -24,24 +24,25 @@ export const IMAGE_GENERATION_GUIDE = `【聊天生图】
 
 一、生图时机
 
-用户请求画图或生成图片时，结合当前对话调用 generate_image。信息足够就直接画，缺少影响结果的关键信息时再简短询问。
+用户请求画图时，结合当前对话调用 generate_image。信息足够就直接画，缺少影响结果的关键信息时再简短询问。
 
 二、参考图使用
 
-读取已保存的参考图，按画面中的人物选取 reference_ids，并在 prompt 中写明每张参考图对应谁。
+按画面需要选择 reference_ids，在 prompt 中说明每张参考图对应的人物和参考用途。
 
-人物图默认参考长相；服装、动作、构图与画风依照本次要求及参考图备注。
+人物图默认参考长相，保留五官、发型等辨识特征；服装、动作、构图与画风依照本次要求及参考图备注。
 
 三、画面提示词
 
-将 prompt 写成一段可独立理解的画面描述，包含：
+将 prompt 写成可独立理解的画面描述，清楚交代：
 - 人物及其与参考图的对应关系。
-- 动作、表情和相对位置。
-- 场景，以及本次画面需要的服饰、构图与画风。
+- 动作、表情、视线和互动。
+- 人物位置、景别与构图。
+- 场景、服饰、画风及必要的光影。
 
 保留用户指定的内容，未指定的细节结合对话自然补足。
 
-画风默认采用平涂日系二次元风格；用户另有指定时，以用户要求为准。
+默认采用日系二次元动漫风格；用户另有指定时，以用户要求为准。
 
 四、调用与回复
 
@@ -80,7 +81,7 @@ export function imageEndpoint(baseUrl: string, withReferences: boolean): string 
 export function validateImageConfig(config: ImageGenerationConfig): void {
     imageEndpoint(config.baseUrl, false);
     if (!config.apiKey || !config.model) throw new Error('请先填写生图 API Key 和模型名称');
-    if (!['auto', 'low', 'medium', 'high'].includes(config.quality)) throw new Error('请选择有效的图片质量');
+    if (!['auto', 'low', 'medium', 'high', 'xhigh'].includes(config.quality)) throw new Error('请选择有效的图片质量');
     if (!/^\d+x\d+$/.test(config.size)) throw new Error('图片尺寸格式应为 1024x1024');
     const [w, h] = config.size.split('x').map(Number);
     if (Math.min(w, h) < 256 || Math.max(w, h) > 3840 || w % 16 || h % 16 || Math.max(w, h) / Math.min(w, h) > 3) {

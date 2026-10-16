@@ -19,6 +19,7 @@ it('saves the per-chat toggle alongside the shared API settings without changing
         await act(async () => root.render(createElement(ImageGenerationSettings, { charId: 'c1' })));
         expect(host.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
         expect(host.querySelectorAll('select')).toHaveLength(2);
+        expect(host.querySelector('select[aria-label="生图质量"] option[value="xhigh"]')?.textContent).toContain('超高');
         await act(async () => (host.querySelector('input[type=checkbox]') as HTMLInputElement).click());
         expect(state.value.updateCharacter).not.toHaveBeenCalled();
         await act(async () => Array.from(host.querySelectorAll('button')).find(b => b.textContent === '保存设置')!.click());

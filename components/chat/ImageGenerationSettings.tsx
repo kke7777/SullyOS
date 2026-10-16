@@ -104,9 +104,10 @@ export default function ImageGenerationSettings({ charId, onSaved }: { charId?: 
                 <option value="1024x1024">方图 1024×1024</option><option value="1536x1024">横图 1536×1024</option><option value="1024x1536">竖图 1024×1536</option>
             </select></label>
             <label className="space-y-1 text-xs font-bold">图片质量<select aria-label="生图质量" value={draft.quality} onChange={e => change('quality', e.target.value as ImageGenerationConfig['quality'])} className={field}>
-                <option value="auto">自动</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option>
+                <option value="auto">自动</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">超高（xhigh）</option>
             </select></label>
         </div>
+        <p className="text-[11px] text-slate-400">xhigh 适用于支持该质量档位的生图线路；渠道不支持时会返回错误，请手动选择其他档位。</p>
         <div className="space-y-3 border-t border-slate-100 pt-3">
             <div className="text-sm font-bold">人物参考图</div>
             <p className="text-[11px] leading-relaxed text-slate-500">接口和参考图在各会话间共用，生图开关按会话保存。开启时，以下参考图会发给当前聊天模型；生图工具只转交它选中的原图。备注可写“仅参考五官，不参考服装和画风”。</p>

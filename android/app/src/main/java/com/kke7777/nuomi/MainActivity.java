@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AmsgUnifiedPushPlugin.class);
         registerPlugin(NativeSystemBarsPlugin.class);
+        registerPlugin(PhotoLibraryPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
