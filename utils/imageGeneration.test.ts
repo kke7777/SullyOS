@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { getBlobForRef, resolveRefToDataUrl } from './blobRef';
-import { createImageGenerationSession, DEFAULT_IMAGE_CONFIG, generateImage, imageEndpoint, prepareImageGenerationContext } from './imageGeneration';
+import { createImageGenerationSession, DEFAULT_IMAGE_CONFIG, generateImage, imageEndpoint, normalizeImageConfig, prepareImageGenerationContext } from './imageGeneration';
 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9sAAAAASUVORK5CYII=';
 const dataUrl = `data:image/png;base64,${png}`;
@@ -100,4 +100,52 @@ it('uses the native Android multipart serialization with both files, preserving 
     expect(req.data.filter((e: any) => e.type === 'base64File')).toHaveLength(2);
     expect(req.data.find((e: any) => e.key === 'prompt').value).toContain('露露抱着咲咲');
     expect(fetch).not.toHaveBeenCalled();
+});
+
+it('keeps older saved configurations on the compatible protocol', () => {
+    const { apiType, ...legacy } = config();
+    expect(normalizeImageConfig(legacy)).toMatchObject({ apiType: 'openai', baseUrl: legacy.baseUrl, model: legacy.model });
+    expect(normalizeImageConfig({ apiType: 'openrouter' })).toMatchObject({ baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-image-2.5-sunburst' });
+});
+it.each(['https://openrouter.ai', 'https://openrouter.ai/api/', 'https://openrouter.ai/api/v1/', 'https://openrouter.ai/api/v1/images', 'https://openrouter.ai/api/v1/images/models'])('normalizes OpenRouter domain and endpoint addresses: %s', baseUrl => {
+    expect(imageEndpoint(baseUrl, false, 'openrouter')).toBe('https://openrouter.ai/api/v1/images');
+    expect(imageEndpoint(baseUrl, true, 'openrouter')).toBe('https://openrouter.ai/api/v1/images');
+});
+it.each([false, true])('generates through OpenRouter JSON with and without references (native=%s)', async native => {
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(native);
+    vi.mocked(CapacitorHttp.request).mockResolvedValue({ status: 200, data: { data: [{ b64_json: png, media_type: 'image/png' }], usage: { cost: 0.25 } }, headers: {}, url: '' });
+    vi.mocked(getBlobForRef).mockImplementation(async ref => new Blob([ref], { type: 'image/png' }));
+    vi.mocked((await import('./blobRef')).blobToDataUrl).mockImplementation(async blob => `data:image/png;base64,${btoa(await blob.text())}`);
+    const openrouter = { ...config(), apiType: 'openrouter' as const, baseUrl: 'https://openrouter.ai', model: 'openai/gpt-image-2.5-sunburst', quality: 'xhigh' as const };
+    for (const reference_ids of [[], ['saki', 'loulou']]) {
+        const result = await generateImage(openrouter, { prompt: '露露抱着咲咲', reference_ids });
+        const req = native ? vi.mocked(CapacitorHttp.request).mock.calls.at(-1)![0] : null;
+        const [url, init] = native ? [req!.url, req] : vi.mocked(fetch).mock.calls.at(-1)! as any;
+        expect(url).toBe('https://openrouter.ai/api/v1/images');
+        expect(init.headers['Content-Type']).toBe('application/json');
+        expect(init.dataType).toBeUndefined();
+        const body = native ? req!.data : JSON.parse(init.body);
+        expect(body).toMatchObject({ model: openrouter.model, quality: 'xhigh', n: 1, stream: false, size: '1024x1024' });
+        if (reference_ids.length) {
+            expect(body.input_references.map((r: any) => atob(r.image_url.url.split(',')[1]))).toEqual(['blobref:saki', 'blobref:loulou']);
+            expect(body.prompt).toContain('参考图1：咲咲。仅参考长相');
+            expect(body.prompt).toContain('参考图2：露露。仅参考五官');
+        } else expect(body.input_references).toBeUndefined();
+        expect(result.blob.type).toBe('image/png');
+        expect(result.costUsd).toBe(native ? 0.25 : 0.12);
+    }
+    expect(native ? CapacitorHttp.request : fetch).toHaveBeenCalledTimes(2);
+    expect(native ? fetch : CapacitorHttp.request).not.toHaveBeenCalled();
+});
+it('does not retry OpenRouter errors or describe its endpoint as OpenAI edits', async () => {
+    vi.mocked(fetch).mockResolvedValue({ status: 404, json: async () => ({ error: { message: 'private-key model unavailable' } }) } as any);
+    const save = vi.fn();
+    const run = createImageGenerationSession({ ...config(), apiType: 'openrouter', baseUrl: 'https://openrouter.ai', model: 'openai/gpt-image-2.5-sunburst' }, save);
+    const result = await run({ prompt: '合照', reference_ids: ['loulou'] });
+    expect(result).toContain('本轮不自动重试');
+    expect(result).not.toContain('private-key');
+    expect(result).not.toContain('/images/edits');
+    await run({ prompt: '合照', reference_ids: ['loulou'] });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
 });

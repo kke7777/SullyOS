@@ -8,6 +8,8 @@ export interface ImageReference {
     imageRef: string;
 }
 export interface ImageGenerationConfig {
+    /** Missing in older backups: retain the OpenAI-compatible protocol. */
+    apiType?: 'openai' | 'openrouter';
     baseUrl: string;
     apiKey: string;
     model: string;
@@ -16,8 +18,12 @@ export interface ImageGenerationConfig {
     references: ImageReference[];
 }
 export const DEFAULT_IMAGE_CONFIG: ImageGenerationConfig = {
+    apiType: 'openai',
     baseUrl: 'https://api.sunflowerllm.com', apiKey: '', model: '[0.15]gpt-image-2.5-sunburst',
     size: '1024x1024', quality: 'medium', references: [],
+};
+export const OPENROUTER_IMAGE_DEFAULTS = {
+    baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-image-2.5-sunburst',
 };
 export const IMAGE_TOOL_NAME = 'generate_image';
 export const IMAGE_GENERATION_GUIDE = `【聊天生图】
@@ -62,24 +68,34 @@ export const IMAGE_GENERATION_TOOL = {
     },
 };
 export function normalizeImageConfig(value?: Partial<ImageGenerationConfig>): ImageGenerationConfig {
+    const defaults = value?.apiType === 'openrouter' ? OPENROUTER_IMAGE_DEFAULTS : DEFAULT_IMAGE_CONFIG;
     return {
         ...DEFAULT_IMAGE_CONFIG, ...value,
-        baseUrl: (value?.baseUrl ?? DEFAULT_IMAGE_CONFIG.baseUrl).trim().replace(/\/+$/, ''),
+        apiType: value?.apiType ?? 'openai',
+        baseUrl: (value?.baseUrl ?? defaults.baseUrl).trim().replace(/\/+$/, ''),
         apiKey: (value?.apiKey ?? '').trim(),
-        model: (value?.model ?? DEFAULT_IMAGE_CONFIG.model).trim(),
+        model: (value?.model ?? defaults.model).trim(),
         references: Array.isArray(value?.references) ? value.references : [],
     };
 }
-export function imageEndpoint(baseUrl: string, withReferences: boolean): string {
-    const root = baseUrl.trim().replace(/\/+$/, '').replace(/\/images\/(?:generations|edits)$/, '');
+export function imageEndpoint(baseUrl: string, withReferences: boolean, apiType: ImageGenerationConfig['apiType'] = 'openai'): string {
+    if (apiType !== 'openai' && apiType !== 'openrouter') throw new Error('请选择有效的生图接口类型');
+    let root = baseUrl.trim().replace(/\/+$/, '');
+    root = apiType === 'openrouter' ? root.replace(/\/images(?:\/models)?$/, '') : root.replace(/\/images\/(?:generations|edits)$/, '');
     const url = new URL(root);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
         throw new Error('生图 API 地址应为 HTTP(S) 基础地址');
     }
+    if (apiType === 'openrouter') {
+        if (!url.pathname || url.pathname === '/') root += '/api/v1';
+        else if (root.endsWith('/api')) root += '/v1';
+        else if (!root.endsWith('/v1')) throw new Error('OpenRouter 地址应为域名、/api/v1 或完整 /api/v1/images 地址');
+        return `${root}/images`;
+    }
     return `${root.endsWith('/v1') ? root : `${root}/v1`}/images/${withReferences ? 'edits' : 'generations'}`;
 }
 export function validateImageConfig(config: ImageGenerationConfig): void {
-    imageEndpoint(config.baseUrl, false);
+    imageEndpoint(config.baseUrl, false, config.apiType);
     if (!config.apiKey || !config.model) throw new Error('请先填写生图 API Key 和模型名称');
     if (!['auto', 'low', 'medium', 'high', 'xhigh'].includes(config.quality)) throw new Error('请选择有效的图片质量');
     if (!/^\d+x\d+$/.test(config.size)) throw new Error('图片尺寸格式应为 1024x1024');
@@ -134,7 +150,14 @@ export async function generateImage(config: ImageGenerationConfig, args: unknown
     abortCheck(signal);
     const legend = refs.map((r, i) => `参考图${i + 1}：${r.name}。${r.description || '参考人物长相。'}`).join('\n');
     const fields = { model: config.model, prompt: [legend, input.prompt.trim()].filter(Boolean).join('\n\n'), size: config.size, quality: config.quality, n: 1, stream: false };
-    const url = imageEndpoint(config.baseUrl, refs.length > 0);
+    const isOpenRouter = config.apiType === 'openrouter';
+    const multipart = blobs.length > 0 && !isOpenRouter;
+    // OpenRouter accepts reference images as data URLs in the same JSON request.
+    const requestBody = isOpenRouter && blobs.length ? { ...fields,
+        input_references: await Promise.all(blobs.map(async blob => ({ type: 'image_url', image_url: { url: await blobToDataUrl(blob) } }))),
+    } : fields;
+    abortCheck(signal);
+    const url = imageEndpoint(config.baseUrl, refs.length > 0, config.apiType);
     // Paid requests are sent once. Never retry with references removed or a different model.
     const controller = new AbortController();
     const cancel = () => controller.abort(signal?.reason);
@@ -145,10 +168,10 @@ export async function generateImage(config: ImageGenerationConfig, args: unknown
         let status: number;
         const headers: Record<string, string> = { Authorization: `Bearer ${config.apiKey}` };
         if (Capacitor.isNativePlatform()) {
-            let body: any = fields;
+            let body: any = requestBody;
             let dataType: 'formData' | undefined;
             headers['Content-Type'] = 'application/json';
-            if (blobs.length) {
+            if (multipart) {
                 headers['Content-Type'] = `multipart/form-data; boundary=Nuomi${crypto.randomUUID().replace(/-/g, '')}`;
                 dataType = 'formData';
                 body = Object.entries(fields).map(([key, value]) => ({ key, value: String(value), type: 'string' }));
@@ -162,12 +185,12 @@ export async function generateImage(config: ImageGenerationConfig, args: unknown
             status = response.status; data = response.data;
         } else {
             let body: BodyInit;
-            if (blobs.length) {
+            if (multipart) {
                 const form = new FormData();
                 Object.entries(fields).forEach(([key, value]) => form.append(key, String(value)));
                 blobs.forEach((blob, i) => form.append('image[]', blob, `reference-${i + 1}.${blob.type === 'image/jpeg' ? 'jpg' : blob.type.split('/')[1]}`));
                 body = form;
-            } else { headers['Content-Type'] = 'application/json'; body = JSON.stringify(fields); }
+            } else { headers['Content-Type'] = 'application/json'; body = JSON.stringify(requestBody); }
             const response = await fetch(url, { method: 'POST', headers, body, signal: controller.signal, redirect: 'error' });
             status = response.status;
             try { data = await response.json(); } catch { throw new Error(`生图接口未返回 JSON（HTTP ${status}），请检查 API 地址`); }
@@ -176,7 +199,7 @@ export async function generateImage(config: ImageGenerationConfig, args: unknown
         if (typeof data === 'string') { try { data = JSON.parse(data); } catch { throw new Error('生图接口未返回有效 JSON'); } }
         if (status < 200 || status >= 300 || data?.error) {
             const detail = String(data?.error?.message || data?.message || `HTTP ${status}`).replaceAll(config.apiKey, '[已隐藏]').slice(0, 350);
-            throw new Error(`生图失败：${detail}${refs.length && status === 404 ? '。当前渠道未提供标准带图接口 /v1/images/edits' : ''}`);
+            throw new Error(`生图失败：${detail}${!isOpenRouter && refs.length && status === 404 ? '。当前渠道未提供标准带图接口 /v1/images/edits' : ''}`);
         }
         const item = data?.data?.[0];
         let blob: Blob;

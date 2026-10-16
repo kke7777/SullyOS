@@ -15,10 +15,10 @@ vi.mock('./applyAssistantPostProcessing', () => ({ applyAssistantPostProcessing:
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9sAAAAASUVORK5CYII=';
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
-it('runs the real chat tool loop, publishes an image and gallery reference, then excludes the feature when disabled', async () => {
-    const char: any = { id: 'image-integration', name: '露露', chatImageGenerationEnabled: true, emotionConfig: { enabled: false } };
+it.each(['openai', 'openrouter'] as const)('runs the real %s chat tool loop, publishes an image and gallery reference, then excludes the feature when disabled', async apiType => {
+    const char: any = { id: `image-integration-${apiType}`, name: '露露', chatImageGenerationEnabled: true, emotionConfig: { enabled: false } };
     const imageRef = `data:image/png;base64,${png}`;
-    const imageConfig = { ...DEFAULT_IMAGE_CONFIG, apiKey: 'image-private', references: [
+    const imageConfig = { ...DEFAULT_IMAGE_CONFIG, apiType, ...(apiType === 'openrouter' ? { baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-image-2.5-sunburst' } : {}), apiKey: 'image-private', references: [
         { id: 'loulou', name: '露露', description: '仅参考长相', imageRef },
         { id: 'saki', name: '咲咲', description: '仅参考长相', imageRef },
     ] };

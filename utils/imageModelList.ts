@@ -3,11 +3,14 @@ import { imageEndpoint, ImageGenerationConfig } from './imageGeneration';
 import { extractModelIds } from './modelList';
 
 /** List models with the image API credentials, without starting a generation. */
-export async function fetchImageModels(config: Pick<ImageGenerationConfig, 'baseUrl' | 'apiKey'>, signal?: AbortSignal): Promise<string[]> {
+export async function fetchImageModels(config: Pick<ImageGenerationConfig, 'baseUrl' | 'apiKey' | 'apiType'>, signal?: AbortSignal): Promise<string[]> {
     if (!config.baseUrl.trim()) throw new Error('请先填写生图 API 地址');
     if (!config.apiKey.trim()) throw new Error('请先填写生图 API Key');
     let url: string;
-    try { url = imageEndpoint(config.baseUrl, false).replace(/\/images\/generations$/, '/models'); }
+    try {
+        const endpoint = imageEndpoint(config.baseUrl, false, config.apiType);
+        url = config.apiType === 'openrouter' ? `${endpoint}/models` : endpoint.replace(/\/images\/generations$/, '/models');
+    }
     catch { throw new Error('请填写有效的生图 API 地址'); }
     signal?.throwIfAborted();
     const controller = new AbortController();

@@ -52,3 +52,21 @@ it('aborts a browser request after the list timeout', async () => {
     await vi.advanceTimersByTimeAsync(30_000);
     await checked;
 });
+
+it.each([false, true])('loads the OpenRouter image catalog with its own key (native=%s)', async native => {
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(native);
+    const data = { data: [{ id: 'openai/gpt-image-2.5-sunburst', name: 'OpenAI: GPT Image 2.5 Sunburst' }, { id: 'openai/gpt-image-2.5-flare' }] };
+    vi.mocked(fetch).mockResolvedValue({ status: 200, text: async () => JSON.stringify(data) } as Response);
+    vi.mocked(CapacitorHttp.request).mockResolvedValue({ status: 200, data, headers: {}, url: '' });
+    for (const baseUrl of ['https://openrouter.ai', 'https://openrouter.ai/api/v1', 'https://openrouter.ai/api/v1/images']) {
+        expect(await fetchImageModels({ apiType: 'openrouter', baseUrl, apiKey: ' or-image-key ' })).toEqual(['openai/gpt-image-2.5-sunburst', 'openai/gpt-image-2.5-flare']);
+    }
+    const expected = { method: 'GET', headers: expect.objectContaining({ Authorization: 'Bearer or-image-key' }) };
+    if (native) {
+        expect(CapacitorHttp.request).toHaveBeenCalledWith(expect.objectContaining({ ...expected, url: 'https://openrouter.ai/api/v1/images/models' }));
+        expect(fetch).not.toHaveBeenCalled();
+    } else {
+        expect(fetch).toHaveBeenCalledWith('https://openrouter.ai/api/v1/images/models', expect.objectContaining(expected));
+        expect(CapacitorHttp.request).not.toHaveBeenCalled();
+    }
+});
