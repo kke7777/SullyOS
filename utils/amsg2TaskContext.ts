@@ -135,7 +135,7 @@ export function buildAmsg2NoticesText(
   if (!expired.length) return null;
   const target = targetName?.trim() || '对方';
   return [
-    '【你的主动消息排程·仅你可见】',
+    '【主动消息排程·仅你可见】',
     ...buildNoticeSections(expired, charTz, target),
     AMSG2_SCHEDULE_SECRECY_NOTE.replace('用户', target),
   ].join('\n');
@@ -161,13 +161,13 @@ export function buildAmsg2TaskContextText(
   createdThisTurn?: ReadonlySet<string>,
   /** ChatApp 当前用户名；空值回退为「对方」。 */
   targetName?: string,
-  /** 「用户给你定的规矩」（amsgLimits.buildLimitsBrief），紧跟常驻简介。 */
+  /** 「排程限制」（amsgLimits.buildLimitsBrief），紧跟常驻简介。 */
   limitsBrief?: string,
 ): string {
   const target = targetName?.trim() || '对方';
   const isNewThisTurn = (taskUuid: string) => !!createdThisTurn?.has(taskUuid);
   const hasNewThisTurn = pending.some((t) => isNewThisTurn(t.taskUuid));
-  const parts: string[] = ['【你的主动消息排程·仅你可见】', buildAmsg2ChatScheduleBrief(target)];
+  const parts: string[] = ['【主动消息排程·仅你可见】', buildAmsg2ChatScheduleBrief(target)];
   if (limitsBrief) parts.push(limitsBrief);
 
   if (pending.length) {

@@ -367,6 +367,8 @@ export async function safeFetchJson(
     meta?: ApiCallMeta,
     /** 可选：流式增量回调（请求体带 stream:true 时传入才有意义；响应不是 SSE 时静默不触发）。 */
     streamHooks?: StreamHooks,
+    /** Local dispatch hook, after asynchronous preparation; never serialized or logged. */
+    onDispatch?: () => void,
 ): Promise<any> {
     const retryableStatuses = new Set([429, 500, 502, 503, 504]);
     let lastError: Error | null = null;
@@ -413,6 +415,8 @@ export async function safeFetchJson(
         }
         const attemptStartedAt = Date.now();
         try {
+            attemptOptions.signal?.throwIfAborted();
+            onDispatch?.();
             const response = await fetch(url, attemptOptions);
             if (timeoutHandle) clearTimeout(timeoutHandle);
             lastStatus = response.status;

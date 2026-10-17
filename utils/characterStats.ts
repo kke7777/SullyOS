@@ -8,15 +8,8 @@ import { normalizeUserImpression } from './impression';
 import { isScheduleFeatureOn } from './scheduleFeature';
 
 export const countContextCharacters = (text: string) => Array.from(text).length;
-/** Local heuristic only, not a provider tokenizer or billing count. */
-export function estimateContextTokens(text: string): number {
-    let latin = 0, other = 0;
-    for (const character of text) {
-        if (character.codePointAt(0)! <= 127) latin++;
-        else other++;
-    }
-    return Math.ceil(latin / 4 + other);
-}
+import { estimateContextTokens } from './tokenEstimate';
+export { estimateContextTokens } from './tokenEstimate';
 export const messageSourceLabel = (source?: string): string => {
     if (!source || source === 'chat') return '聊天 · ChatApp / 未标注';
     if (source === 'date') return '见面 · DateApp';

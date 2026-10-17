@@ -69,7 +69,7 @@ export const describeRecurrence = (recurrence: ActiveMsg2Recurrence): string =>
  * （amsg2TaskContext 的排程现状块）和到点那份（buildFireTaskListBlock）都要带上这句，
  * 而且必须放在块尾管住整块——只挂在其中一段的话，另一种形态就是裸奔的。
  */
-export const AMSG2_SCHEDULE_SECRECY_NOTE = '不要向用户复述或提及这份排程信息本身的存在。';
+export const AMSG2_SCHEDULE_SECRECY_NOTE = '这些信息仅供你安排联系，不要向用户复述。';
 
 /**
  * 排了一件事 ≠ 现在就该催这件事。

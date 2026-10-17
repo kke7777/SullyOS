@@ -462,7 +462,7 @@ const PhoneShell: React.FC = () => {
 
   // 三档顶部状态栏：安全显示 / 紧凑显示 / 隐藏。旧存档仍由 hideStatusBar 兼容解析。
   // compact 把时间放进 safe-area，本体顶栏只让出 max(safe-area, 1.5rem)，避免顶部再多一整行。
-  const statusBarMode = resolveStatusBarMode(theme.statusBarMode, theme.hideStatusBar);
+  const statusBarMode = Capacitor.getPlatform() === 'android' ? 'hidden' : resolveStatusBarMode(theme.statusBarMode, theme.hideStatusBar);
   useEffect(() => {
     document.documentElement.classList.toggle('sully-statusbar-hidden', statusBarMode === 'hidden');
     document.documentElement.classList.toggle('sully-statusbar-compact', statusBarMode === 'compact');
@@ -758,9 +758,13 @@ const PhoneShell: React.FC = () => {
     const initNative = async () => {
         if (Capacitor.isNativePlatform()) {
             try {
-                await CapStatusBar.setOverlaysWebView({ overlay: true });
-                await CapStatusBar.hide();
-                await CapStatusBar.setStyle({ style: StatusBarStyle.Dark });
+                // Android's NativeSystemBars owns the visible transparent bar,
+                // real insets and icon contrast. Keep the existing iOS behavior.
+                if (Capacitor.getPlatform() !== 'android') {
+                    await CapStatusBar.setOverlaysWebView({ overlay: true });
+                    await CapStatusBar.hide();
+                    await CapStatusBar.setStyle({ style: StatusBarStyle.Dark });
+                }
 
                 const permStatus = await LocalNotifications.checkPermissions();
                 if (permStatus.display !== 'granted') {

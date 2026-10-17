@@ -113,8 +113,13 @@ describe('DatePrompts.buildSessionPayload', () => {
         const off = await DatePrompts.buildSessionPayload(baseInput(makeChar({ dateStyleConfig: { digDeeper: false } })));
         expect(sysOf(off.messages)).not.toContain('深挖，别填充');
         expect(lastUserOf(off.messages).content).not.toContain('本轮线索');
-        // ContextBuilder 的全 App 通用精简版（表达底线）不受 digDeeper 开关影响，常驻
-        expect(sysOf(off.messages)).toContain('表达底线');
+        // 公共 Anti-Filler 已移除；见面的细节深挖开关仍独立生效。
+        for (const result of [on, off]) {
+            const system = result.messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+            expect(system).not.toContain('表达底线');
+            expect(system).not.toContain('珍贵的素材');
+            expect(system).toContain(buildCharacterResponsePrinciples('小白', user.name));
+        }
     });
 
     it('本轮 user 带 System Note，末尾 system 收束角色原则；reroll 的 note 不同', async () => {

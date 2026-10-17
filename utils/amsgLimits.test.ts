@@ -153,24 +153,50 @@ describe('buildLimitsBrief', () => {
       earliestText: '21:40',
       dailyRemaining: 3,
     });
-    expect(text).toContain('现在还能再排 2 次');
-    expect(text).toContain('最早排到 21:40');
-    expect(text).toContain('今天还能再主动找对方 3 次');
-    expect(text).toContain('现在挂着 2 个');
-    expect(text).toContain('只能排一次性的');
+    expect(text).toContain('目前还能安排 2 次');
+    expect(text).toContain('最早可安排在 21:40');
+    expect(text).toContain('今天还能主动联系 3 次');
+    expect(text).toContain('目前有 2 个');
+    expect(text).toContain('仅支持一次性任务');
   });
 
   it('额度用完了直说；不限的项不出现', () => {
     const full = buildLimitsBrief({ limits: resolveAmsgLimits(undefined), committedSends: 3, activeTasks: 0 });
-    expect(full).toContain('一次都不能再排了');
+    expect(full).toContain('目前剩余 0 次，等对方回复后再安排');
     const loose = buildLimitsBrief({
       limits: resolveAmsgLimits({ maxUnansweredSends: 0, minSendGapMinutes: 0, allowSelfRecurring: true, allowSelfForce: true }),
       committedSends: 9,
       activeTasks: 0,
     });
-    expect(loose).not.toContain('连着主动找对方');
-    expect(loose).not.toContain('至少隔');
-    expect(loose).not.toContain('只能排一次性的');
+    expect(loose).not.toContain('对方未回复期间');
+    expect(loose).not.toContain('至少间隔');
+    expect(loose).not.toContain('仅支持一次性任务');
     expect(loose).not.toContain('到点必发');
+  });
+
+  it('自定义额度、任务名额和小时级间隔按设置生成，不保留默认数字', () => {
+    const text = buildLimitsBrief({
+      limits: resolveAmsgLimits({ maxUnansweredSends: 7, minSendGapMinutes: 90, maxActiveTasks: 8 }),
+      committedSends: 4,
+      activeTasks: 6,
+    });
+    expect(text).toContain('最多主动联系 7 次');
+    expect(text).toContain('目前还能安排 3 次');
+    expect(text).toContain('至少间隔 1 小时 30 分钟');
+    expect(text).toContain('最多同时保留 8 个任务，目前有 6 个');
+    expect(text).not.toContain('最多主动联系 3 次');
+    expect(text).not.toContain('最多同时保留 5 个任务');
+  });
+
+  it('超过连发额度仍显示零；每日额度用完时保留明天再安排的动态分支', () => {
+    const text = buildLimitsBrief({
+      limits: resolveAmsgLimits({ dailySendCap: 2 }),
+      committedSends: 5,
+      activeTasks: 2,
+      dailyRemaining: 0,
+    });
+    expect(text).toContain('目前剩余 0 次');
+    expect(text).not.toContain('安排 -2 次');
+    expect(text).toContain('今日主动联系额度已用完，请安排在明天');
   });
 });

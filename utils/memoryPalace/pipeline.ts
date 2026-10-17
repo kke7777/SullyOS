@@ -80,6 +80,7 @@ import { isRemoteSearchBroken } from './vectorSearch';
 import { spreadActivation } from './activation';
 import { applyPriming, checkRumination } from './priming';
 import { expandAndFormat } from './formatter';
+import type { RecallMaterial } from './recallMaterial';
 import { runConsolidation } from './consolidation';
 import { rerankDocuments } from './rerank';
 // 认知消化由用户在记忆宫殿 App 手动触发，不在聊天管线中自动运行
@@ -375,6 +376,7 @@ function splitLastTurnQueries(messages: Message[]): {
  * @param queryOverride App 自定义上下文（场景、题目等），会与最近一轮对话拼接后一起检索
  */
 export interface RecallRetrievalOptions {
+    onMaterial?: (material: RecallMaterial) => void;
     explicitEntityAnalysis?: ExplicitEntityAnalysis;
     /** 预留 Resolver 补救 query：只增加检索支路，不替换原始 user spikes。 */
     recallPlan?: RecallPlan;
@@ -1112,7 +1114,7 @@ export async function retrieveMemories(
         const anticipations = await tRetrieve('AnticipationDB.getByCharId', 'IDB', AnticipationDB.getByCharId(charId));
 
         // 10. 格式化
-        const formatted = await tRetrieve('expandAndFormat', 'IDB', expandAndFormat(results, charId, anticipations, userName, formatterCap));
+        const formatted = await tRetrieve('expandAndFormat', 'IDB', expandAndFormat(results, charId, anticipations, userName, formatterCap, recallOptions?.onMaterial));
 
         // ── 汇总打印 ──
         const perfTotal = Math.round(performance.now() - perfRetrieveT0);
@@ -1180,7 +1182,7 @@ export async function injectMemoryPalace(
     recentMessages?: Message[],
     queryHint?: string,
     userName?: string,
-    traceContext?: { entryPoint?: RecallEntryPoint; formatterMaxOutputItems?: number },
+    traceContext?: { entryPoint?: RecallEntryPoint; formatterMaxOutputItems?: number; onMaterial?: (material: RecallMaterial) => void },
 ): Promise<RecallTrace> {
     const hadPreviousMemory = Boolean(char.memoryPalaceInjection);
     const hadPreviousRoomPlates = Boolean(char.roomPlatesInjection);
@@ -1406,7 +1408,7 @@ export async function injectMemoryPalace(
             getRemoteVectorConfig(),
             char.name,
             telemetry => { retrievalTelemetry = telemetry; },
-            { explicitEntityAnalysis, formatterMaxOutputItems: traceContext?.formatterMaxOutputItems },
+            { explicitEntityAnalysis, formatterMaxOutputItems: traceContext?.formatterMaxOutputItems, onMaterial: traceContext?.onMaterial },
         );
         if (context || !legacyCompatibilityMode) {
             char.memoryPalaceInjection = context || '';

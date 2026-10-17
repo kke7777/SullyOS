@@ -1,8 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
-import { acquireChatReply, isChatReplyActive, subscribeChatReplies } from './chatReplyLock';
+import { acquireChatReply, getChatReplyPhase, isChatReplyActive, subscribeChatReplies } from './chatReplyLock';
 import { hasUnansweredUserTurn, withChatContinuation } from './chatContinuation';
 
 describe('手动回复边界', () => {
+    it('按角色保留回忆/回复阶段，旧轮迟到的阶段更新不能改写新轮', () => {
+        const release = acquireChatReply('phase-a')!;
+        expect(getChatReplyPhase('phase-a')).toBe('preparing');
+        release.setPhase('recollecting');
+        expect(getChatReplyPhase('phase-a')).toBe('recollecting');
+        expect(getChatReplyPhase('phase-b')).toBeNull();
+        release.setPhase('replying');
+        expect(getChatReplyPhase('phase-a')).toBe('replying');
+        release();
+        expect(getChatReplyPhase('phase-a')).toBeNull();
+        const next = acquireChatReply('phase-a')!;
+        release.setPhase('recollecting');
+        expect(getChatReplyPhase('phase-a')).toBe('preparing');
+        next();
+        release.setPhase('replying');
+        expect(getChatReplyPhase('phase-a')).toBeNull();
+    });
+
     it('同一帧只接纳一次；取消订阅/重新进入聊天不解除后台请求占位', () => {
         const listener = vi.fn();
         const unsubscribe = subscribeChatReplies(listener);

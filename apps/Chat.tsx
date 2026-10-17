@@ -1,5 +1,7 @@
+import ImageGenerationSettings from '../components/chat/ImageGenerationSettings';
 import {avatarFrameLayer} from '../utils/avatarFrameTarget';
 import ChatRuntimeStyle from '../components/chat/ChatRuntimeStyle';
+import ChatReplyStatus from '../components/chat/ChatReplyStatus';
 import {homePhoneAppearance,HOME_PHONE_BUBBLES} from './room3d/homePhoneAppearance';
 
 import { publishReplyDisplay, stopReplyRuns } from '../utils/chatReplyCancellation';
@@ -7,6 +9,7 @@ import { stopInstantChat } from '../utils/amsgInstantChat';
 import {resolvePsycheAppearance} from '../utils/psycheAppearance';
 import { startsNewMessageGroup } from '../utils/chatMessageGrouping';
 import EmojiExportDialog from '../components/chat/EmojiExportDialog';
+import { importLocalEmoji } from '../utils/emojiImport';
 import BlobRefStyle from '../components/chat/BlobRefStyle';
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -289,6 +292,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
     const [archiveProgress, setArchiveProgress] = useState('');
     const [showProactiveModal, setShowProactiveModal] = useState(false);
     const [showActiveMsg2Modal, setShowActiveMsg2Modal] = useState(false);
+    const [showImageGenerationSettings, setShowImageGenerationSettings] = useState(false);
     const [showThinkingChainModal, setShowThinkingChainModal] = useState(false);
 
     // Archive Prompts State
@@ -443,7 +447,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
     }, [activeCharacterId]);
 
     // --- Initialize Hook ---
-    const { isTyping, streamingBubbles, streamingThinking, streamingHandoverIds, inboxStatus, recallStatus, searchStatus, diaryStatus, emotionStatus, memoryPalaceStatus, memoryPalaceResult, setMemoryPalaceResult, lastDigestResult, setLastDigestResult, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI, startProactiveChat, stopProactiveChat, isProactiveActive } = useChatAI({
+    const { isTyping, replyPhase, streamingBubbles, streamingThinking, streamingHandoverIds, inboxStatus, recallStatus, searchStatus, diaryStatus, emotionStatus, memoryPalaceStatus, memoryPalaceResult, setMemoryPalaceResult, lastDigestResult, setLastDigestResult, lastTokenUsage, tokenBreakdown, setLastTokenUsage, triggerAI, startProactiveChat, stopProactiveChat, isProactiveActive } = useChatAI({
         char,
         homePhoneContext:homePhone?.getContext,
         userProfile,
@@ -1372,7 +1376,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                 scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
             }
         }
-    }, [messages, isTyping, streamingBubbles, streamingThinking, inboxStatus, recallStatus, searchStatus, diaryStatus, selectionMode, windowedFocusMsgId]);
+    }, [messages, isTyping, replyPhase, streamingBubbles, streamingThinking, inboxStatus, recallStatus, searchStatus, diaryStatus, selectionMode, windowedFocusMsgId]);
 
     // 白框提示音：当 char 新发的消息成为会话最后一条时播放一次（用户自己/历史/翻旧消息都不响）。
     // 声音配置编码在白框 CSS 注释里（角色 chromeCustomCss 覆盖全局 chatChromeCustomCss），随白框分享一起走。
@@ -1783,6 +1787,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
             trackEvent('打开聊天功能面板项', { action: type });
         }
         switch (type) {
+            case 'image-generation': setShowPanel('none'); setShowImageGenerationSettings(true); break;
             case 'collaboration': setShowPanel('none'); setCollaborationOpen(true); break;
             case 'memory-link': setShowPanel('none'); setMemoryRepairOpen(true); break;
             case 'favorites': setShowPanel('none'); setFavoritesOpen(true); break;
@@ -2272,6 +2277,15 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         setModalType('none');
         setNewCategoryName('');
         addToast('分类创建成功', 'success');
+    };
+
+    const handleImportEmojiImage = async (file: File, name: string) => {
+        const targetCatId = activeCategory === 'default' ? undefined : activeCategory;
+        await importLocalEmoji(file, name, targetCatId);
+        markEmojiLibraryChanged();
+        await loadEmojiData();
+        setModalType('none');
+        addToast('表情包添加成功', 'success');
     };
 
     const handleImportEmoji = async () => {
@@ -3884,6 +3898,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
 
                 onTransfer={() => { if(transferAmt) handleSendText(`[转账]`, 'transfer', { amount: transferAmt, note: transferNote.trim() || undefined, status: 'pending' }); setTransferNote(''); setModalType('none'); }}
                 onImportEmoji={handleImportEmoji}
+                onImportEmojiImage={handleImportEmojiImage} emojiNames={emojis.map(emoji => emoji.name)}
                 onSaveSettings={saveSettings}
                 onOpenHistoryCleanup={() => { setModalType('none'); setShowHistoryCleanup(true); }} onArchive={handleFullArchive}
                 onCreatePrompt={createNewPrompt} onEditPrompt={editSelectedPrompt} onSavePrompt={handleSavePrompt} onDeletePrompt={handleDeletePrompt}
@@ -4337,18 +4352,15 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                                     <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                     🔍 {searchStatus}
                                 </div>
-                            ) : recallStatus ? (
-                                <div className="flex items-center gap-2 text-xs text-indigo-500 font-medium">
-                                    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    {recallStatus}
-                                </div>
+                            ) : replyPhase === 'recollecting' || recallStatus ? (
+                                <ChatReplyStatus characterName={char.name} phase="recollecting" />
                             ) : diaryStatus ? (
                                 <div className="flex items-center gap-2 text-xs text-amber-600 font-medium">
                                     <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                     📖 {diaryStatus}
                                 </div>
                             ) : (
-                                <div className="flex gap-1"><div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div><div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"></div><div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"></div></div>
+                                <ChatReplyStatus characterName={char.name} phase={replyPhase ?? (instantChatPending ? 'replying' : 'preparing')} />
                             )}
                         </div>
                     </div>
@@ -4451,6 +4463,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                     luckinActivated={luckinActivated}
                     htmlModeEnabled={!!(char as any).htmlModeEnabled}
                     showThinkingChain={!!(char as any).showThinkingChain}
+                    imageGenerationEnabled={char.chatImageGenerationEnabled === true}
                     inputStyle={osTheme.chatInputStyle}
                     sendButtonStyle={osTheme.chatSendButtonStyle}
                     chromeStyle={osTheme.chatChromeStyle}
@@ -4459,6 +4472,9 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
             </div>
 
 
+            {char && showImageGenerationSettings && <Modal isOpen title="聊天生图" onClose={() => setShowImageGenerationSettings(false)}>
+                <ImageGenerationSettings key={char.id} charId={char.id} onSaved={() => setShowImageGenerationSettings(false)} />
+            </Modal>}
             {/* Proactive Settings Modal */}
             {char && (
                 <ProactiveSettingsModal

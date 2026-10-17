@@ -1,5 +1,5 @@
 import type { ActiveMsg2InboxMessage } from '../types';
-import { flushInboxToChat } from './activeMsgRuntime';
+import { flushInboxToChat, handleInstantErrorPushMessage } from './activeMsgRuntime';
 import { ActiveMsgStore } from './activeMsgStore';
 
 const RECEIVED_IDS_KEY = 'amsg2_native_received_ids_v2';
@@ -19,11 +19,11 @@ const rememberReceivedId = (messageId: string): void => {
 };
 
 export const parseNativeAmsgPayload = (raw: unknown): Record<string, any> | null => {
-  if (raw && typeof raw === 'object') return raw as Record<string, any>;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, any>;
   if (typeof raw !== 'string' || !raw.trim()) return null;
   try {
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, any> : null;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, any> : null;
   } catch {
     return null;
   }
@@ -41,23 +41,36 @@ export const ingestNativeAmsgPayload = async (
   const messageId = String(payload.messageId || `${charId}-${Date.now()}`);
   if (readReceivedIds().includes(messageId)) return { charId, messageId };
 
+  if (payload.messageKind === 'result') {
+    const { dispatchAmsgResult } = await import('./amsgResults');
+    if (!await dispatchAmsgResult(payload)) throw new Error('原生后台任务结果尚未成功保存');
+    rememberReceivedId(messageId);
+    return { charId, messageId };
+  }
+  if (payload.messageKind === 'error') {
+    await handleInstantErrorPushMessage({ type: 'active-msg-error', ...payload, charId });
+    rememberReceivedId(messageId);
+    return { charId, messageId };
+  }
+
   const parsedSentAt = payload.timestamp ? new Date(payload.timestamp).getTime() : NaN;
-  const body = String(payload.message || '').trim();
+  const emotion = payload.messageKind === 'emotion_update';
+  const body = emotion ? '' : String(payload.message || payload.body || '').trim();
   const inbox: ActiveMsg2InboxMessage = {
     messageId,
     charId,
     charName: String(payload.contactName || payload.metadata?.charName || '主动消息'),
     body,
-    previewBody: String(previewOverride || payload.previewBody || body).trim(),
+    previewBody: emotion ? '' : String(previewOverride || payload.notification?.body || payload.previewBody || body).trim(),
     avatarUrl: payload.avatarUrl,
     source: payload.source,
-    messageType: payload.messageType,
+    messageType: emotion ? 'emotion_update' : payload.messageType,
     messageSubtype: payload.messageSubtype,
     taskId: payload.taskId ?? null,
     taskUuid: payload.taskUuid ?? null,
     recurrenceType: payload.recurrenceType ?? null,
     occurrenceMs: payload.occurrenceMs ?? null,
-    metadata: {
+    metadata: emotion ? { charId, emotionRaw: payload.metadata?.emotionRaw || '' } : {
       ...(payload.metadata || {}),
       sessionId: payload.sessionId,
       messageIndex: payload.messageIndex,

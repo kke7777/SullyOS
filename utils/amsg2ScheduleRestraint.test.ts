@@ -87,7 +87,7 @@ describe('排程清单不该被当成本轮待办', () => {
 });
 
 describe('排程块的位置：钢印要留住最后一眼', () => {
-  const block = { role: 'system', content: '【你的主动消息排程·仅你可见】…' };
+  const block = { role: 'system', content: '【主动消息排程·仅你可见】…' };
 
   it('插在易变尾段之前，「回到你自己」还是最后一条', () => {
     const messages = [

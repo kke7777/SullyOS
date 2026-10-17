@@ -280,6 +280,22 @@ describe('POST /instant-chat 的形状', () => {
     expect(task.metadata).not.toHaveProperty('amsgSar');
   });
 
+  it('invokes the local recollection dispatch hook only for the prepared instant-chat POST, without uploading the hook', async () => {
+    stubFirePackDeps();
+    const calls = mockInstantChatFetch(202, { status: 'accepted', uuid: 'uuid-recollection' });
+    const onDispatch = vi.fn();
+    const pending = sendInstantChatTurn({
+      char: CHAR, chatMessages: [{ role: 'user', content: '在吗' }], api: API,
+      userProfile: USER, groups: [], realtimeConfig: {} as any, onDispatch,
+    });
+    expect(onDispatch).not.toHaveBeenCalled();
+    expect((await pending).ok).toBe(true);
+    expect(onDispatch).toHaveBeenCalledTimes(1);
+    const call = calls.find(c => String(c.url).includes('/instant-chat'))!;
+    expect(call.init).not.toHaveProperty('onDispatch');
+    expect(String(call.init.body)).not.toContain('onDispatch');
+  });
+
   it('凭据带的是调用方给的那份（本地生成会用的同一份）', async () => {
     const { task } = await postOnce([{ role: 'user', content: '在吗' }]);
     expect(task.apiUrl).toBe('https://api.example.com/v1/chat/completions');

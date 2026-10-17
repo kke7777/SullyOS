@@ -1,3 +1,4 @@
+import ImageGenerationSettings from '../components/chat/ImageGenerationSettings';
 import NavigationBallSettings from '../components/settings/NavigationBallSettings';
 import { useSettingsFocus } from '../utils/settingsNavigation';
 import ApiPresetGroups from '../components/settings/ApiPresetGroups';
@@ -2630,6 +2631,10 @@ const Settings: React.FC = () => {
                     </div>
                 )}
             </div>
+        </SettingsSection>
+
+        <SettingsSection title="生图 API" icon={<span>🎨</span>}>
+            <ImageGenerationSettings />
         </SettingsSection>
 
         {/* 独立识图 API：给不支持 image_url 的主模型补视觉能力；可手动从通用模型预设载入。 */}

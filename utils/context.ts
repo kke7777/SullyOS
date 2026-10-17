@@ -690,19 +690,6 @@ const renderCoreContext = async (
         context += formatWorldbookSection(worldbookSections.authorsNoteBottom, '世界书 · 作者注释底部');
         context += formatWorldbookSection(worldbookSections.atDepth, '世界书 · 深度条目（上下文模式）');
 
-        // 7. 表达底线 (Anti-Filler) —— 全 App 通用的精简版防套话提示。
-        // 模型八股（空泛感慨、万能句式）是"没话找话"时的填充物，这里只做正向引导
-        // （去挖具体素材），不列任何禁语——把禁语写进提示词反而会激活它（粉色大象）。
-        // 完整方法版在 datePrompts 的 DIG_DEEPER_BLOCK（见面模式专用，可按角色开关）。
-        // 群聊流（groupOptions）跳过：多成员场景会重复注入 N 份，群聊侧暂不接入。
-        if (!groupOptions) {
-            context += `### 表达底线（Anti-Filler）
-
-当你觉得“没什么可说”的时候，你可以用那些珍贵的素材——对方的用词、ta怎么说的、ta没说的部分、此刻的情境、你们的过去、你心里闪过的念头——挑一两条，让它们自然融入你的语言中。
-
-`;
-        }
-
         // Debug: warn about missing context sections
         const missing: string[] = [];
         if (!char.systemPrompt) missing.push('systemPrompt');

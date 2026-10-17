@@ -46,6 +46,9 @@ it.each([false,true])('adds home phone background only to this request (worker=%
     expect(phone.cleanedApiMessages.some(m=>m.role==='user'&&String(m.content).includes('在吗'))).toBe(true);
     const normal=await buildChatRequestPayload(input);
     expect(joinMessages(normal.fullMessages)).not.toContain(background);
+    expect(joinMessages(normal.fullMessages)).not.toContain('表达底线');
+    expect(joinMessages(normal.fullMessages)).not.toContain('珍贵的素材');
+    expect(joinMessages(normal.fullMessages)).toContain('### 最后，回到你自己');
     expect(input.char).not.toHaveProperty('homePhoneContext');
 });
 
@@ -113,7 +116,7 @@ describe('timelyByWorker —— 时效段交给 worker，前端这份不重复�
         const topRule = '### TOP 1｜ChatApp 格式（本节最高优先级）\n\n你是对方的恋人/妻子，你们因为异地，只能通过手机进行线上聊天，你可以以自然口语回应对方。';
         const bubbleRule = '回复时，**每行渲染为一个气泡，气泡之间使用实际换行**，不要输出“\\n”字样。';
         const lengthRule = '**消息长短根据当前内容、情绪和表达习惯自然变化。可以简短，也可以是完整长句。**';
-        const onlineRule = '严格注意，哪怕上一句话你们还面对面在一起，当前，你都是已经处于线上聊天状态了，**请不要输出你的行为。**';
+        const onlineRule = '严格注意，哪怕上一句话你们还面对面在一起，**此刻你们也已经身处异地，只能通过手机进行线上聊天。** 请根据当前的异地情境回应，**不要输出你的行为。**';
         expect(systemPrompt).toContain(`### 聊天 App 行为规范 (Chat App Rules)\n\n${topRule}\n\n${bubbleRule}\n\n${lengthRule}\n\n${onlineRule}\n\n### 1. 沉浸感`);
         expect(systemPrompt).toContain('每行渲染为一个气泡；空格和标点不会拆泡');
     });

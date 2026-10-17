@@ -72,6 +72,7 @@ import { evaluateEmotionBackground } from '../hooks/useChatAI';
 import {HOME_SECRETS_UPDATED} from '../utils/homeSecrets';
 import { CHAT_GEN_EVENTS, setChatViewSnapshot, isEmbeddedChatVisible } from '../utils/chatGenEvents';
 import { buildChatRequestPayload } from '../utils/chatRequestPayload';
+import { createRecollectionDispatch } from '../utils/memoryPalace/recollectionSnapshot';
 import { ChatPrompts } from '../utils/chatPrompts';
 import { extractHtmlBlocks } from '../utils/htmlPrompt';
 import { mergePalaceFragmentsIntoMemories } from '../utils/memoryPalace/pipeline';
@@ -2483,7 +2484,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                   method: 'POST', headers,
                   body: JSON.stringify(reqBody)
-              }, 2, 0, { appName: '消息', charId, charName: char.name, purpose: '主动消息' });
+              }, 2, 0, { appName: '消息', charId, charName: char.name, purpose: '主动消息' }, undefined, createRecollectionDispatch(payload.recollection));
 
               // 5. Process & save response
               let aiContent = data.choices?.[0]?.message?.content || '';

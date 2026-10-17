@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SullyOS·糯米机</string>
+    <string name="title_activity_main">SullyOS·糯米机</string>
+    <string name="package_name">com.kke7777.nuomi</string>
+    <string name="custom_url_scheme">com.kke7777.nuomi</string>
+</resources>
