@@ -9,8 +9,28 @@ import type { RecollectionSnapshot } from './recollectionSnapshot';
 export const RECOLLECTION_TIMEOUT_MS = 30_000;
 export const RECOLLECTION_TOKEN_LIMIT = 2000;
 
+/** Reject the observed wrong-task shapes; normal narration may still quote past dialogue. */
+export function recollectionOutputProblem(content: string, material: RecallMaterial, names: string[]): string | undefined {
+    const lines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const dialogue = lines.filter(line => {
+        const speaker = line.match(/^\[([^\]\r\n]+)\]\s*[:：]/)?.[1];
+        return speaker && names.some(name => name && (speaker === name || name.startsWith(speaker + '·')));
+    });
+    if (dialogue.length >= 3 && dialogue.reduce((sum, line) => sum + line.length, 0) >= content.trim().length * 0.5) {
+        return '副 API 写成了聊天记录，已使用召回原文。';
+    }
+    const prefix = material.prefix.trim();
+    if ((prefix.length >= 20 && content.includes(prefix))
+        || /^\s*###\s*记忆宫殿\s*\(Memory Palace\)/.test(content)
+        || content.includes('记着不等于要一直说——话赶到那儿了顺口提一句就够了')) {
+        return '副 API 返回了记忆模板内容，已使用召回原文。';
+    }
+}
+
 export function buildRecollectionPrompt(charName: string, userName: string): string {
-    return `你是${charName}，正在与${userName}聊天。
+    return `你是${charName}，正在回忆与${userName}有关的往事。
+
+角色设定用于保持你的身份、性格与感受；当前对话用于判断哪些往事相关；回忆中的事件、原话和细节以“本次召回记忆”为依据。本次只完成私人回忆的写作。
 
 请结合当前对话和角色设定，从召回的记忆中选取最相关的往事，以自己的第一人称，像写私人日记一样自然地回忆。
 
@@ -38,16 +58,23 @@ export async function prepareRecollection(input: {
     signal?: AbortSignal;
     timeoutMs?: number;
 }): Promise<RecollectionSnapshot> {
-    const { char, user, material, signal } = input;
+    const { char, user, signal } = input;
+    // Freeze the batch before any asynchronous work. It cannot acquire later chat text.
+    const material = input.material && { ...input.material, sources: input.material.sources.map(source => ({ ...source })) };
+    const history = input.messages.filter(message => message.role === 'user' || message.role === 'assistant').map(message => ({
+        role: message.role,
+        content: formatMessageForPrompt(message, char.name, user.name || '用户'),
+    }));
     signal?.throwIfAborted();
     const original: RecollectionSnapshot = {
         charId: char.id, text: input.originalText, sources: material?.sources ?? [],
         status: input.originalText ? 'original' : 'empty',
     };
     if (!material?.memoryText.trim()) return original;
-    const fallback: RecollectionSnapshot = { ...original, status: 'fallback' };
+    const requestId = Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2, '0')).join('');
+    const fallback: RecollectionSnapshot = { ...original, status: 'fallback', requestId, recalledText: material.memoryText };
     const api = readSecondaryApi();
-    if (!api) return fallback;
+    if (!api) return { ...fallback, fallbackReason: '未配置副 API，已使用召回原文。' };
 
     // One deadline includes context building, maintenance queue, fetch and the complete body.
     // Promise.race also bounds providers/adapters that do not settle after abort.
@@ -77,17 +104,21 @@ export async function prepareRecollection(input: {
                 mountedWorldbooks: char.mountedWorldbooks,
                 timeAwarenessEnabled: false,
             } as CharacterProfile;
-            const history = input.messages.map(message => ({
-                role: message.role,
-                content: formatMessageForPrompt(message, char.name, user.name || '用户'),
-            }));
-            const messages = await ContextBuilder.buildCharacterRequest({
+            // Resolve mounted worldbooks against the original visible history once.
+            // This is reference material for the writer, not another live roleplay session.
+            const reference = await ContextBuilder.buildCharacterRequest({
                 char: identity, user, includeDetailedMemories: false,
-                layout: { deferVolatile: true }, timeOptions: { skipTimeAwareness: true },
-                instructions: buildRecollectionPrompt(char.name, user.name || '用户'),
+                layout: { deferVolatile: true, omitMemoryBank: true }, timeOptions: { skipTimeAwareness: true },
             }, history);
             controller.signal.throwIfAborted();
-            messages.push({ role: 'user', content: `本次召回记忆：\n${material.memoryText}` });
+            const messages = [
+                { role: 'system', content: buildRecollectionPrompt(char.name, user.name || '用户') },
+                { role: 'user', content: `参考资料（角色设定、当前对话及补充设定）：\n${JSON.stringify(reference.map((message, index) => ({
+                    source: index === 0 ? '角色与关系设定' : history.some(entry => entry === message) ? '当前对话参考片段' : '世界书补充设定',
+                    role: message.role, content: message.content,
+                })))}` },
+                { role: 'user', content: `本次召回记忆：\n${material.memoryText}` },
+            ];
             const data = await safeFetchJson(`${api.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST', signal: controller.signal,
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${api.apiKey}` },
@@ -95,15 +126,20 @@ export async function prepareRecollection(input: {
             }, 0, 0, { appName: '记忆宫殿', charId: char.id, charName: char.name, purpose: '召回回忆整理' });
             controller.signal.throwIfAborted();
             // A reasoning-only response is an empty recollection, not a usable private memory.
+            const raw = data?.choices?.[0]?.message?.content;
+            const secondaryOutput = typeof raw === 'string' ? raw : raw == null ? '' : JSON.stringify(raw);
             const content = extractContent({ choices: [{ message: { content: data?.choices?.[0]?.message?.content } }] });
-            if (!content) return fallback;
+            if (!content) return { ...fallback, secondaryOutput, fallbackReason: '副 API 返回正文为空，已使用召回原文。' };
+            const problem = recollectionOutputProblem(content, material, [char.name, user.name || '用户']);
+            if (problem) return { ...fallback, secondaryOutput, fallbackReason: problem };
             const narrative = truncateContextTokens(content, RECOLLECTION_TOKEN_LIMIT);
-            return { ...original, status: 'refined', text: `${material.prefix}${narrative}\n\n${material.suffix}`.trim() };
+            return { ...fallback, status: 'refined', secondaryOutput, narrative,
+                text: `${material.prefix}${narrative}\n\n${material.suffix}`.trim() };
         };
         return await Promise.race([work(), deadline]);
     } catch {
         signal?.throwIfAborted();
-        return fallback;
+        return { ...fallback, fallbackReason: controller.signal.aborted ? '回忆整理等待超时，已使用召回原文。' : '副 API 请求失败，已使用召回原文。' };
     } finally {
         if (timer) clearTimeout(timer);
         if (abortParent) signal?.removeEventListener('abort', abortParent);

@@ -5,6 +5,12 @@ export interface RecollectionSnapshot {
     text: string;
     sources: RecallSource[];
     status: 'refined' | 'fallback' | 'original' | 'empty';
+    /** These fields belong only to this secondary request, never the main reply. */
+    requestId?: string;
+    recalledText?: string;
+    secondaryOutput?: string;
+    narrative?: string;
+    fallbackReason?: string;
 }
 
 export interface UsedRecollection extends RecollectionSnapshot {
@@ -22,6 +28,9 @@ export function readUsedRecollection(charId: string): UsedRecollection | null {
             || !['refined', 'fallback', 'original', 'empty'].includes(value.status)) return null;
         if (!value.sources.every((source: RecallSource) => source && typeof source.id === 'string'
             && typeof source.name === 'string' && ['event_box', 'memory'].includes(source.kind))) return null;
+        for (const key of ['requestId', 'recalledText', 'secondaryOutput', 'narrative', 'fallbackReason']) {
+            if (value[key] !== undefined && typeof value[key] !== 'string') return null;
+        }
         return value;
     } catch { return null; }
 }
@@ -38,10 +47,13 @@ export function saveUsedRecollection(snapshot?: RecollectionSnapshot): void {
 }
 
 export function createRecollectionDispatch(snapshot?: RecollectionSnapshot): () => void {
+    // The transport owns a value snapshot. Later changes to a caller's object,
+    // sources or reply state must not rewrite the already prepared round.
+    const prepared = snapshot && { ...snapshot, sources: snapshot.sources.map(source => ({ ...source })) };
     let dispatched = false;
     return () => {
         if (dispatched) return;
         dispatched = true;
-        saveUsedRecollection(snapshot);
+        saveUsedRecollection(prepared);
     };
 }

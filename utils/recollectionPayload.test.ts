@@ -38,11 +38,16 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
 
+function writingResponse(_body: any, text: string) {
+    return new Response(JSON.stringify({ choices: [{ message: { content: text } }] }));
+}
+
 it.each(['整理后的回忆', ''])('keeps the memory stage open through the entire secondary call, including empty-result fallback (%s)', async text => {
     let release!: () => void, started!: () => void;
     const waiting = new Promise<void>(resolve => { started = resolve; });
-    const response = new Promise<Response>(resolve => { release = () => resolve(new Response(JSON.stringify({ choices: [{ message: { content: text } }] }))); });
-    vi.stubGlobal('fetch', vi.fn(() => { started(); return response; }));
+    let body: any;
+    const response = new Promise<Response>(resolve => { release = () => resolve(writingResponse(body, text)); });
+    vi.stubGlobal('fetch', vi.fn((_url, init) => { body = JSON.parse(String(init.body)); started(); return response; }));
     const stages: string[] = [];
     const pending = buildChatRequestPayload({ ...input(), onPreparationStage: event => {
         if (event.stage === 'memory') stages.push(event.status);
@@ -63,13 +68,13 @@ it.each(['chat_app', 'home_3d', 'proactive_chat'] as const)('uses the prepared b
         const body = JSON.parse(String(init.body)); bodies.push(body);
         if (String(url).includes('secondary.example')) {
             expect(readUsedRecollection(previous.charId)?.text).toBe(previous.text);
-            return new Response(JSON.stringify({ choices: [{ message: { content: '整理后的私人回忆标记' } }] }));
+            return writingResponse(body, '整理后的私人回忆标记');
         }
         const snapshot = readUsedRecollection(previous.charId);
         expect(snapshot).toMatchObject({ status: 'refined', sources: batch.sources });
         expect(snapshot?.text).toContain('整理后的私人回忆标记');
         expect(body.messages.some((message: any) => typeof message.content === 'string' && message.content.includes(snapshot?.text))).toBe(true);
-        return new Response(JSON.stringify({ choices: [{ message: { content: '回复' } }] }));
+        return new Response(JSON.stringify({ choices: [{ message: { content: '[角色]: 这是稍后才生成的本轮主回复' } }] }));
     }));
     const args = { ...input(), recallEntryPoint: entry };
     const stages: any[] = [];
@@ -87,6 +92,10 @@ it.each(['chat_app', 'home_3d', 'proactive_chat'] as const)('uses the prepared b
     await safeFetchJson('https://main.example/v1/chat/completions', { method: 'POST', body: JSON.stringify({ messages: result.fullMessages }) },
         0, 0, undefined, undefined, createRecollectionDispatch(result.recollection));
     expect(bodies).toHaveLength(2);
+    const saved = readUsedRecollection(previous.charId)!;
+    expect(saved.narrative).toBe('整理后的私人回忆标记');
+    expect(saved.secondaryOutput).toContain('整理后的私人回忆标记');
+    expect(JSON.stringify(saved)).not.toContain('这是稍后才生成的本轮主回复');
 });
 
 it('does not save a prepared result if the send was stopped before fetch', async () => {

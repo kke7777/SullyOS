@@ -46,3 +46,21 @@ it('separates character records and shows a new empty request instead of stale r
     expect(host.textContent).toContain('本次没有召回记忆');
     expect(host.textContent).toContain('本次没有注入回忆文字');
 });
+
+it('shows secondary output separately from the pinned injection and reports a rejected reply', async () => {
+    saveUsedRecollection({ charId: 'page-char', text: '便利贴\n真正采用的回忆', narrative: '真正采用的回忆',
+        requestId: 'one', recalledText: '本次往事素材', secondaryOutput: '<private_recollection id="one">真正采用的回忆</private_recollection>',
+        status: 'refined', sources: [] });
+    await act(async () => root.render(React.createElement(RecollectionPage, { charId: 'page-char', charName: '角色', onBack() {} })));
+    const narrativeSection = [...host.querySelectorAll('section')].find(section => section.textContent?.startsWith('副 API 整理后的回忆正文'))!;
+    expect(narrativeSection.textContent).toContain('真正采用的回忆');
+    expect(narrativeSection.textContent).not.toContain('便利贴');
+    expect(narrativeSection.textContent).not.toContain('private_recollection');
+    expect(host.textContent).toContain('交给副 API 的召回原文');
+    await act(async () => saveUsedRecollection({ charId: 'page-char', text: '召回原文', requestId: 'two',
+        secondaryOutput: '[角色]: 本轮主回复', fallbackReason: '副 API 返回内容未对应本轮回忆任务，已使用召回原文。', status: 'fallback', sources: [] }));
+    expect(host.textContent).toContain('本轮没有采用副 API 整理正文');
+    expect(host.textContent).toContain('未对应本轮回忆任务');
+    const rawSection = [...host.querySelectorAll('details')].find(section => section.textContent?.startsWith('副 API 原始返回'))!;
+    expect(rawSection.textContent).toContain('[角色]: 本轮主回复');
+});

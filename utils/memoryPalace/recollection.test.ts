@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContextBuilder } from '../context';
-import { prepareRecollection, RECOLLECTION_TIMEOUT_MS, buildRecollectionPrompt } from './recollection';
+import { prepareRecollection, RECOLLECTION_TIMEOUT_MS, buildRecollectionPrompt, recollectionOutputProblem } from './recollection';
 import { createRecollectionDispatch, readUsedRecollection, saveUsedRecollection } from './recollectionSnapshot';
 import { waitForPalaceRequest } from './maintenanceMode';
 import { estimateContextTokens } from '../tokenEstimate';
@@ -19,7 +19,7 @@ const input = () => ({
     messages: [{ id: 2, role: 'user', type: 'text', content: '还记得那次看海吗' }] as any[],
     material, originalText: material.originalText,
 });
-const response = (content: unknown, extra = {}) => new Response(JSON.stringify({
+const response = (content: unknown, extra = {}, _init?: RequestInit) => new Response(JSON.stringify({
     choices: [{ message: { content, ...extra } }],
 }), { headers: { 'Content-Type': 'application/json' } });
 
@@ -31,7 +31,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(
 
 describe('recall recollection', () => {
     it('sends one batch with identity/worldview/user/visible history, retaining constant blocks', async () => {
-        const fetch = vi.fn(async () => response('那天我和小明一起坐在海边，等太阳慢慢落下去。'));
+        const fetch = vi.fn(async (_url, init) => response('那天我和小明一起坐在海边，等太阳慢慢落下去。', {}, init));
         vi.stubGlobal('fetch', fetch);
         const result = await prepareRecollection(input());
         expect(fetch).toHaveBeenCalledTimes(1);
@@ -54,7 +54,7 @@ describe('recall recollection', () => {
 
     it('keeps the first estimated 2000 tokens exactly and preserves Unicode', async () => {
         const text = '回忆😀abcd'.repeat(700);
-        vi.stubGlobal('fetch', vi.fn(async () => response(text)));
+        vi.stubGlobal('fetch', vi.fn(async (_url, init) => response(text, {}, init)));
         const result = await prepareRecollection({ ...input(), material: { ...material, prefix: '', suffix: '' } });
         const kept = result.text.trim();
         expect(estimateContextTokens(kept)).toBeLessThanOrEqual(2000);
@@ -132,12 +132,59 @@ describe('recall recollection', () => {
 
     it('uses the approved prompt wording', () => {
         const prompt = buildRecollectionPrompt('角色', '小明');
-        expect(prompt.startsWith('你是角色，正在与小明聊天。')).toBe(true);
+        expect(prompt.startsWith('你是角色，正在回忆与小明有关的往事。')).toBe(true);
         expect(prompt.endsWith('直接输出回忆正文。')).toBe(true);
     });
+
+    it('keeps roleplay instructions and prior assistant replies in reference data, with only the writing task at system priority', async () => {
+        const fetch = vi.fn(async (_url, init) => response('那天我和小明在海边。', {}, init));
+        vi.stubGlobal('fetch', fetch);
+        const result = await prepareRecollection({ ...input(), char: { ...input().char, systemPrompt: '每行输出聊天气泡，用语音回复' }, messages: [
+            { id: 2, role: 'assistant', type: 'text', content: '<语音>旧回复</语音>' },
+            { id: 3, role: 'user', type: 'text', content: '那天的事情呢？' },
+        ] as any });
+        const body = JSON.parse(String(fetch.mock.calls[0][1].body));
+        expect(body.messages.filter((m: any) => m.role === 'assistant')).toEqual([]);
+        expect(body.messages.find((m: any) => m.content.includes('旧回复')).content).toContain('当前对话参考片段');
+        expect(result.narrative).toBe('那天我和小明在海边。');
+        expect(result.secondaryOutput).toBe('那天我和小明在海边。');
+        expect(body.messages.filter((m: any) => m.role === 'system')).toHaveLength(1);
+        expect(body.messages[0].content).not.toContain('每行输出聊天气泡');
+        expect(body.messages[1].content).toContain('每行输出聊天气泡');
+        expect(JSON.stringify(body.messages)).not.toContain('暂无特定记忆，请基于当前对话互动');
+        expect(result.text).not.toContain('private_recollection');
+    });
+
+    it.each([
+        '[角色]: ……诶？\n[角色]: 露露往上翻了一下，好像真的是呢\n[角色]: <语音>宝贝，你连这个都发现了呀。</语音>\n[角色]: [表情包]',
+        '### 记忆宫殿 (Memory Palace)\n📌 **便利贴（近期重要事项）**\n记着不等于要一直说——话赶到那儿了顺口提一句就够了',
+    ])('rejects the observed chat/template output itself, preserving the raw response and full original memories (%s)', async raw => {
+        const fetch = vi.fn(async () => response(raw));
+        vi.stubGlobal('fetch', fetch);
+        const result = await prepareRecollection(input());
+        expect(result).toMatchObject({ status: 'fallback', text: material.originalText, secondaryOutput: raw });
+        expect(result.fallbackReason).toContain('已使用召回原文');
+        expect(result.narrative).toBeUndefined();
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows a diary to quote an old conversation without requiring an arbitrary response tag', async () => {
+        const narrative = '那天我和小明坐在海边，风吹得眼睛有些睁不开。\n[角色]: 想再看一会儿日落。\n小明没有催我，只把围巾递给我。现在想起她的动作，我仍然觉得暖和。';
+        expect(recollectionOutputProblem(narrative, material, ['角色', '小明'])).toBeUndefined();
+        vi.stubGlobal('fetch', vi.fn(async () => response(narrative)));
+        expect(await prepareRecollection(input())).toMatchObject({ status: 'refined', narrative });
+    });
+
 });
 
 describe('last dispatched recollection', () => {
+    it('keeps the dispatch snapshot independent of later main reply and source mutations', () => {
+        const next = { charId: 'snapshot-value', text: '固定的注入正文', narrative: '固定的整理回忆', secondaryOutput: '副API原文', status: 'refined' as const, sources: [{ id: 'one', kind: 'memory' as const, name: '原条目' }] };
+        const dispatch = createRecollectionDispatch(next);
+        next.text = '[角色]: 本轮主回复'; next.narrative = '改写的正文'; next.sources[0].name = '错误条目';
+        dispatch();
+        expect(readUsedRecollection(next.charId)).toMatchObject({ text: '固定的注入正文', narrative: '固定的整理回忆', secondaryOutput: '副API原文', sources: [{ name: '原条目' }] });
+    });
     it('keeps the previous result until dispatch, saves all fields together and separates characters', () => {
         const previous = { charId: 'char-a', text: '上一次', sources: material.sources, status: 'refined' } as const;
         saveUsedRecollection({ ...previous, sources: [...previous.sources] });

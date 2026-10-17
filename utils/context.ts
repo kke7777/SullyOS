@@ -554,6 +554,8 @@ const renderCoreContext = async (
              * 只有聊天主路径（chatPrompts.buildSystemPromptParts）用；其他 App 不传，行为不变。
              */
             deferVolatile?: boolean;
+            /** Reference-only tasks supply their own source material, including empty states. */
+            omitMemoryBank?: boolean;
             emotion?: EmotionContextOptions;
         },
     ): Promise<string> => {
@@ -642,29 +644,31 @@ const renderCoreContext = async (
         }
 
         // 5. 记忆库 (Memory Bank)
-        context += `### 记忆系统 (Memory Bank)\n`;
-        let memoryContent = "";
+        if (!layout?.omitMemoryBank) {
+            context += `### 记忆系统 (Memory Bank)\n`;
+            let memoryContent = "";
 
-        const readableMemories = readableContextMemories(char, includeDetailedMemories);
-        if (readableMemories.monthly.length) {
-            memoryContent += '**长期核心记忆 (Key Memories)**:\n';
-            readableMemories.monthly.forEach(({ date, summary }) => {
-                memoryContent += `- [${date}]: ${summary}\n`;
-            });
-        }
-        let details = '';
-        readableMemories.daily.forEach(({ month, entries }) => {
-            if (entries.length) {
-                details += `\n> 详细回忆 [${month}]:\n`;
-                entries.forEach(m => { details += `  - ${m.date} (${m.mood || 'rec'}): ${m.summary}\n`; });
+            const readableMemories = readableContextMemories(char, includeDetailedMemories);
+            if (readableMemories.monthly.length) {
+                memoryContent += '**长期核心记忆 (Key Memories)**:\n';
+                readableMemories.monthly.forEach(({ date, summary }) => {
+                    memoryContent += `- [${date}]: ${summary}\n`;
+                });
             }
-        });
-        if (details) memoryContent += `\n**当前激活的详细回忆 (Active Recall)**:${details}`;
+            let details = '';
+            readableMemories.daily.forEach(({ month, entries }) => {
+                if (entries.length) {
+                    details += `\n> 详细回忆 [${month}]:\n`;
+                    entries.forEach(m => { details += `  - ${m.date} (${m.mood || 'rec'}): ${m.summary}\n`; });
+                }
+            });
+            if (details) memoryContent += `\n**当前激活的详细回忆 (Active Recall)**:${details}`;
 
-        if (!memoryContent) {
-            memoryContent = "(暂无特定记忆，请基于当前对话互动)";
+            if (!memoryContent) {
+                memoryContent = "(暂无特定记忆，请基于当前对话互动)";
+            }
+            context += `${memoryContent}\n\n`;
         }
-        context += `${memoryContent}\n\n`;
 
         // 5b. 记忆宫殿 (Memory Palace) — 向量检索结果
         // 已准备好的向量召回独立于神经链接详细日志；这里不发起额外召回。
