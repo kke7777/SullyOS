@@ -765,7 +765,7 @@ const PromptBreakdownView: React.FC<{ blocks: PromptBlockStat[]; promptTokens?: 
                 return (
                     <div key={i} className="min-w-0">
                         <div className="flex items-baseline justify-between gap-2 min-w-0">
-                            <span className="text-[10px] text-slate-500 truncate" title={b.label}>{b.label}</span>
+                            <span className="text-[10px] text-slate-500 min-w-0 break-words" title={b.label}>{b.label}</span>
                             <span className="text-[10px] font-mono text-slate-400 shrink-0">
                                 {fmt(b.chars)} 字{estTok != null ? ` · ~${fmt(estTok)} tok` : ''} · {pct < 1 ? '<1' : Math.round(pct)}%
                             </span>

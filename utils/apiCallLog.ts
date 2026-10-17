@@ -473,6 +473,52 @@ const MAX_BREAKDOWN_BLOCKS = 48;
 const isRecalledMemoryMessage = (role: unknown, content: unknown): boolean =>
     role === 'user' && typeof content === 'string' && content.startsWith('本次召回记忆：\n');
 
+const RECOLLECTION_REFERENCE_PREFIX = '参考资料（角色设定、当前对话及补充设定）：\n';
+
+/** Read the writer's reference envelope for logging only; never rewrite the request. */
+function splitRecollectionReference(text: string): PromptBlockStat[] | undefined {
+    if (!text.startsWith(RECOLLECTION_REFERENCE_PREFIX)) return undefined;
+    const unsplit = [{ label: '回忆参考资料（未拆分）', chars: text.length }];
+    try {
+        const entries: unknown = JSON.parse(text.slice(RECOLLECTION_REFERENCE_PREFIX.length));
+        if (!Array.isArray(entries) || !entries.every(entry => entry && typeof entry.content === 'string'
+            && ['角色与关系设定', '当前对话参考片段', '世界书补充设定'].includes(entry.source)
+            && ['system', 'user', 'assistant'].includes(entry.role))) return unsplit;
+        const totals = new Map<string, number>();
+        let userCount = 0, assistantCount = 0, contentChars = 0;
+        const add = (label: string, chars: number) => {
+            if (chars) totals.set(label, (totals.get(label) || 0) + chars);
+        };
+        for (const entry of entries) {
+            contentChars += entry.content.length;
+            if (entry.source === '当前对话参考片段') {
+                const isUser = entry.role === 'user';
+                if (isUser) userCount++; else assistantCount++;
+                add(isUser ? '聊天历史·用户消息' : '聊天历史·角色消息', entry.content.length);
+            } else if (entry.source === '世界书补充设定') {
+                add('世界书', entry.content.length);
+            } else {
+                let category = '角色人设';
+                for (const block of splitCaptureTextBlocks(entry.content)) {
+                    if (WORLDBOOK_LABEL_RE.test(block.label)) category = '世界书';
+                    else if (block.label === '你的身份 (Character)') category = '角色人设';
+                    else if (block.label === '世界观与设定 (World Settings)') category = '世界观';
+                    else if (block.label === '互动对象 (User)') category = '用户设定';
+                    add(category, block.end - block.start);
+                }
+            }
+        }
+        // Count escaped newlines/quotes, JSON keys and source labels separately.
+        // Decoded source lengths + envelope overhead equal the sent text length exactly.
+        add('参考资料·格式与标记', text.length - contentChars);
+        return [...totals].map(([label, chars]) => ({
+            label: label === '聊天历史·用户消息' ? `${label} ×${userCount}`
+                : label === '聊天历史·角色消息' ? `${label} ×${assistantCount}` : label,
+            chars,
+        }));
+    } catch { return unsplit; }
+}
+
 /**
  * 从 chat/completions 请求体算输入构成。解析不了 / 没有 messages 时返回 undefined。
  * system 逐块统计，历史消息按角色聚合（用户只关心"内置注入哪块肥"，不关心第几条历史）。
@@ -485,6 +531,8 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
         }
         const messages = parsed?.messages;
         if (!Array.isArray(messages) || messages.length === 0) return undefined;
+        const recollectionRequest = messages.some(msg => msg?.role === 'user'
+            && typeof msg.content === 'string' && msg.content.startsWith(RECOLLECTION_REFERENCE_PREFIX));
 
         const out: PromptBlockStat[] = [];
         let userChars = 0, userCount = 0, asstChars = 0, asstCount = 0, otherChars = 0, otherCount = 0;
@@ -496,9 +544,14 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
         for (const msg of messages) {
             const text = contentToText(msg?.content);
             if (msg?.role === 'system') {
-                out.push(...splitSystemBlocks(text));
+                if (recollectionRequest && text.includes('本次只完成私人回忆的写作。')) {
+                    out.push({ label: '回忆写作任务', chars: text.length });
+                } else out.push(...splitSystemBlocks(text));
             } else if (msg?.role === 'user') {
-                if (isRecalledMemoryMessage(msg.role, text)) {
+                const referenceBlocks = splitRecollectionReference(text);
+                if (referenceBlocks) {
+                    out.push(...referenceBlocks);
+                } else if (isRecalledMemoryMessage(msg.role, text)) {
                     out.push({ label: '本次召回记忆', chars: text.length });
                 } else if (text.length > HUGE_USER_MSG_SPLIT_CHARS && countBlockHeaders(text) >= 2) {
                     out.push(...splitSystemBlocks(text));
