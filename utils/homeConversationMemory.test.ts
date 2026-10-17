@@ -14,7 +14,7 @@ const args:any={char:{id:'c',name:'C',memoryPalaceEnabled:true,memoryPalaceInjec
 beforeEach(()=>{vi.clearAllMocks();m.range.mockResolvedValue({hwm:0,messages:[{id:1,charId:'c',role:'user',type:'text',content:'范围内原文',timestamp:1}]});m.plates.mockResolvedValue('新门牌：喜欢海边');m.recall.mockImplementation(async(c:any)=>{c.memoryPalaceInjection='找回了海边的记忆';c.roomPlatesInjection='新门牌：喜欢海边';return {stages:[{name:'room_plates'}]};});});
 it('refreshes recall and plates before building the actual outgoing prompt without mutating the profile',async()=>{
  const messages=await buildHomeConversationPayload(args),text=JSON.stringify(messages);
- expect(m.recall).toHaveBeenCalledTimes(1);const call=m.recall.mock.calls[0];expect(call[1].map((r:any)=>r.content).join()).toContain('还记得上次一起看海吗');expect(call[4]).toEqual({entryPoint:'home_3d'});
+ expect(m.recall).toHaveBeenCalledTimes(1);const call=m.recall.mock.calls[0];expect(call[1].map((r:any)=>r.content).join()).toContain('还记得上次一起看海吗');expect(call[4]).toMatchObject({entryPoint:'home_3d',onMaterial:expect.any(Function)});
  expect(text).toContain('找回了海边的记忆');expect(text).toContain('新门牌');expect(text).not.toContain('过期');expect(args.char.memoryPalaceInjection).toBe('过期回忆');
 });
 it('does not reread plates when the shared pipeline already loaded them',async()=>{m.recall.mockImplementation(async(c:any)=>{c.roomPlatesInjection='管线门牌';return {stages:[{name:'room_plates'}]};});expect((await buildHomeConversationPayload(args))[0].content).toContain('管线门牌');expect(m.plates).not.toHaveBeenCalled();});

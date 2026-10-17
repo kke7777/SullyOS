@@ -32,6 +32,7 @@ import { buildMcpOpenAITools, buildMcpRejectedToolsFallbackBody, buildMcpTextFal
 import { buildToolResultMessage, normalizeToolCallsForCompat } from '../utils/toolCallCompat';
 import { toolCallFingerprint } from '../utils/agenticToolFeedback';
 import { buildChatRequestPayload } from '../utils/chatRequestPayload';
+import { createRecollectionDispatch } from '../utils/memoryPalace/recollectionSnapshot';
 import { acquireChatReply, isChatReplyActive, subscribeChatReplies } from '../utils/chatReplyLock';
 import { prepareInboxBeforeChat } from '../utils/activeMsgRuntime';
 import { hasUnansweredUserTurn, withChatContinuation } from '../utils/chatContinuation';
@@ -913,6 +914,7 @@ export const useChatAI = ({
             });
 
             const payload = await replyStep(async () => stageT('payload', buildChatRequestPayload({
+                signal: replyRun.signal,
                 char: charForGen, userProfile, groups, emojis, categories,
                 homePhoneContext:homePhoneContext?.(),
                 historyMsgs: contextMsgs,
@@ -934,6 +936,7 @@ export const useChatAI = ({
                 onPreparationStage:event=>{if(event.status==='end')perfStages['payload.'+event.stage]=event.ms;},
             })));
             const systemPrompt = payload.systemPrompt;
+            const dispatchRecollection = createRecollectionDispatch(payload.recollection);
             const cleanedApiMessages = payload.cleanedApiMessages;
             // 在续说补丁和本地/即时对话分流前检查最终历史，不能用补出来的 user 掩盖空上下文。
             assertChatHasDialogue(payload.fullMessages);
@@ -1299,6 +1302,7 @@ export const useChatAI = ({
                 });
                 const instantChatResult = await replyStep(async () => sendInstantChatTurn({
                     signal: replyRun.signal,
+                    onDispatch: () => { replyRun.check(); dispatchRecollection(); },
                     char,
                     // 云端要发给模型的就是本地这一份，一个字不改（见 fire_pack 的 chat 段）。
                     chatMessages: (amsg2NoticesBlock
@@ -1430,7 +1434,7 @@ export const useChatAI = ({
                     signal: replyRun.signal,
                     method: 'POST', headers,
                     body: JSON.stringify({ ...baseReqBody, messages: withAmsg2TaskContext(baseReqBody.messages) })
-                }, 2, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: '聊天回复' }, streamHooks));
+                }, 2, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: '聊天回复' }, streamHooks, dispatchRecollection));
             } catch (e) {
                 replyRun.check();
                 let requestError: unknown = e;

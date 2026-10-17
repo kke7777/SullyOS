@@ -1642,6 +1642,7 @@ const fetchWithAuthRaw = async (
   config: ActiveMsg2GlobalConfig,
   init: RequestInit,
   phase = '接口',
+  onDispatch?: () => void,
 ): Promise<{ status: number; body: any }> => {
   const headers = new Headers(init.headers);
   if (config.serverToken) headers.set('X-Client-Token', config.serverToken);
@@ -1651,6 +1652,8 @@ const fetchWithAuthRaw = async (
   if (gzipped) headers.set('Content-Encoding', 'gzip');
 
   try {
+    init.signal?.throwIfAborted();
+    onDispatch?.();
     const response = await fetch(`${normalizeWorkerBase(config.workerUrl)}/${path}`, {
       ...init,
       headers,
@@ -2817,6 +2820,7 @@ export const ActiveMsgClient = {
   async sendInstantChat(params: {
     uuid?: string;
     signal?: AbortSignal;
+    onDispatch?: () => void;
     char: CharacterProfile;
     /** 本地生成会 POST 给 /chat/completions 的那串 fullMessages，原样带上去。 */
     chatMessages: Array<{ role: string; content: unknown }>;
@@ -3021,7 +3025,7 @@ export const ActiveMsgClient = {
         // 外壳是明文：里头两个信封已经加密好，别再给外壳挂加密头（包装层会当它是整体密文）。
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statePayload, taskPayload: encryptedTask, ...(credPayload ? { credPayload } : {}) }),
-      }, '即时对话');
+      }, '即时对话', params.onDispatch);
     };
 
     let { status, body } = await postInstantChat();

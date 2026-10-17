@@ -18,11 +18,13 @@ import { MemoryNodeDB, EventBoxDB } from './db';
 import { recordRecallReceipt } from './recallReceipts';
 import { formatMemoryDateWithDistance } from './memoryDate';
 import { memoryContentWithDates } from './relativeTime';
+import type { RecallMaterial, RecallSource } from './recallMaterial';
 
 const DEFAULT_MAX_OUTPUT_ITEMS = 15;
 const MAX_LIVE_NODES_PER_BOX = 8; // 单盒最多展开多少条活节点（防止超大盒污染）
 
 interface RenderItem {
+    source: RecallSource;
     /** 精确信号命中项在普通 score 排序前保底进入。 */
     guaranteed: boolean;
     /** 用于排序：取该 item 内最高的 finalScore */
@@ -57,6 +59,7 @@ export async function expandAndFormat(
     userName?: string,
     /** 注入上限。rerank 启用时传 15 + topN，让 rerank 额外召回的不被切。 */
     maxOutputItems: number = DEFAULT_MAX_OUTPUT_ITEMS,
+    onMaterial?: (material: RecallMaterial) => void,
 ): Promise<string> {
     const MAX_OUTPUT_ITEMS = maxOutputItems;
     // 0. 加载便利贴置顶记忆（pinnedUntil > now，不占 15 条名额）
@@ -215,6 +218,7 @@ export async function expandAndFormat(
         console.log(`📌 [MemoryPalace] 便利贴置顶 ${pinnedNodes.length} 条`);
     }
 
+    const memoryStart = output.length;
     // 按房间分组（保持房间显示顺序：卧室 > 客厅 > 书房 > 用户房间 > 自我房间 > 阁楼 > 窗台）
     const byRoom = new Map<string, RenderItem[]>();
     for (const it of finalItems) {
@@ -233,6 +237,7 @@ export async function expandAndFormat(
         }
     }
 
+    const memoryEnd = output.length;
     // 5. 窗台期盼
     const activeAnticipations = anticipations.filter(a => a.status === 'active' || a.status === 'anchor');
     if (activeAnticipations.length > 0) {
@@ -247,6 +252,13 @@ export async function expandAndFormat(
     }
 
     const trimmed = output.trim();
+    onMaterial?.({
+        originalText: trimmed,
+        memoryText: output.slice(memoryStart, memoryEnd).trim(),
+        prefix: output.slice(0, memoryStart),
+        suffix: output.slice(memoryEnd),
+        sources: finalItems.map(item => item.source),
+    });
     console.log(`🏰 [MemoryPalace] 本次召回 ${finalItems.length} 条 (${boxHits.size} 个 box + ${standaloneItems.length} 条独立)，${trimmed.length} 字`);
     return trimmed;
 }
@@ -258,6 +270,7 @@ function buildStandaloneItem(r: ScoredMemory, now: number): RenderItem {
     const date = formatMemoryDateWithDistance(node.createdAt, now);
     const body = `(${date}, 重要性: ${node.importance})\n${memoryContentWithDates(node)}`;
     return {
+        source: { id: node.id, kind: 'memory', name: `${date} · ${node.content.replace(/\s+/g, ' ').slice(0, 36)}` },
         guaranteed: r.recallGuarantee === 'explicit_entity',
         score: r.finalScore,
         room: node.room,
@@ -328,6 +341,7 @@ async function buildBoxItem(
     for (const n of liveToShow) sourceIds.push(n.id);
 
     return {
+        source: { id: box.id, kind: 'event_box', name: box.name },
         guaranteed,
         score: topScore,
         room,

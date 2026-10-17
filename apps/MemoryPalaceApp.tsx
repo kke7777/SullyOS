@@ -1,6 +1,7 @@
 import { ContextBuilder } from '../utils/context';
 
 import MemoryMaintenancePanel from '../components/chat/MemoryMaintenancePanel';
+import RecollectionPage from '../components/chat/RecollectionPage';
 import ChatHistoryCleanupModal from '../components/chat/ChatHistoryCleanupModal';
 import { MemoryTimeText } from '../components/MemoryTimeText';
 import { relativeTimeEdit } from '../utils/memoryPalace/relativeTime';
@@ -678,7 +679,7 @@ export default function MemoryPalaceApp() {
     const char = characters.find(c => c.id === activeCharacterId);
     const [selectGroupId, setSelectGroupId] = useState(GROUP_FILTER_ALL); // 选角色页的分组筛选
 
-    const [view, setView] = useState<'picker' | 'palace' | 'pixelHome' | 'room' | 'memory' | 'settings' | 'globalSettings' | 'all' | 'boxes'>(() => guideStep === 1 ? 'globalSettings' : 'picker');
+    const [view, setView] = useState<'picker' | 'palace' | 'pixelHome' | 'room' | 'memory' | 'settings' | 'globalSettings' | 'all' | 'boxes' | 'recollection'>(() => guideStep === 1 ? 'globalSettings' : 'picker');
     useEffect(() => {
         const reveal = () => {
             if (guideStep === 1) setView('globalSettings');
@@ -2936,6 +2937,10 @@ export default function MemoryPalaceApp() {
 
     // The pixel home keeps its existing per-character IndexedDB records. Opening
     // it does not require enabling memory extraction or changing the active owner.
+    if (view === 'recollection' && char) {
+        return <RecollectionPage key={char.id} charId={char.id} charName={char.name} onBack={() => setView('palace')} />;
+    }
+
     if (view === 'pixelHome' && char) {
         return <React.Suspense fallback={<div role="status" className="h-full grid place-items-center bg-slate-900 text-slate-200">正在打开像素家园…</div>}>
             <PixelHomeView key={char.id} charId={char.id} charName={char.name} charAvatar={char.avatar} userName={userProfile?.name || '用户'} onBack={()=>setView('palace')} navigation={<CharacterHomePages pixel onChange={setView}/>} />
@@ -5037,6 +5042,10 @@ create table if not exists memory_vectors (
                             <Icon name="box" size={13} />
                             <span>查看事件盒</span>
                         </div>
+                        <button type="button" onClick={() => setView('recollection')}
+                            style={{ fontSize: 11, fontWeight: 600, color: '#7c3aed', padding: '4px 12px', borderRadius: 8, border: '1px solid #e9e5ff', background: '#f8f6ff', cursor: 'pointer' }}>
+                            最近使用的回忆
+                        </button>
                     </div>
 
                     <CharacterHomePages onChange={setView} />

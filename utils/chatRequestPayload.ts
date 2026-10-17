@@ -19,6 +19,9 @@ import type { CharacterProfile, UserProfile, GroupProfile, Emoji, EmojiCategory,
 import { ChatPrompts, detectChatModeTransition } from './chatPrompts';
 import { ContextBuilder } from './context';
 import { injectMemoryPalace } from './memoryPalace/pipeline';
+import type { RecallMaterial } from './memoryPalace/recallMaterial';
+import { prepareRecollection } from './memoryPalace/recollection';
+import type { RecollectionSnapshot } from './memoryPalace/recollectionSnapshot';
 import { renderLocalContextGuidance } from './memoryPalace/recallRouter';
 import { renderInteractionAdaptationGuidance } from './memoryPalace/interactionAdaptation';
 import { renderDeepEngagementGuidance } from './memoryPalace/deepEngagement';
@@ -129,6 +132,8 @@ export type ChatPreparationStage='vision'|'memory'|'prompt'|'collaboration'|'tas
 export type ChatPreparationEvent={stage:ChatPreparationStage;status:'start'}|{stage:ChatPreparationStage;status:'end';ms:number};
 
 export interface BuildChatPayloadResult {
+    /** Prepared only; the sending transport saves it when the main request is dispatched. */
+    recollection?: RecollectionSnapshot;
     /** Shared task receipts actually included for a home reply; acknowledge only after success. */
     amsg2ExpiredNoticeIds?: string[];
     /** 完整 system prompt（含所有可选块） */
@@ -322,13 +327,31 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
 
     input.signal?.throwIfAborted();
     // ── 1. Memory Palace 向量召回 ─────────────────────────
-    const recallTrace = await prepare('memory',()=>injectMemoryPalace(
-        char,
-        recentMsgsHint,
-        input.recallQueryHint,
-        userProfile?.name,
-        { entryPoint: input.recallEntryPoint ?? 'chat_payload' },
-    ));
+    const { recallTrace, recollection } = await prepare('memory', async () => {
+        let recallMaterial: RecallMaterial | undefined;
+        const recallTrace = await injectMemoryPalace(
+            char, recentMsgsHint, input.recallQueryHint, userProfile?.name,
+            { entryPoint: input.recallEntryPoint ?? 'chat_payload', onMaterial: material => { recallMaterial = material; } },
+        );
+        // Background evaluations reuse this request's final prompt, without another writing call.
+        const conversationRecall = isChatConversationEntry(input.recallEntryPoint)
+            || input.recallEntryPoint === 'proactive_chat';
+        const recollection = char.memoryPalaceEnabled && conversationRecall
+            ? await prepareRecollection({
+                char, user: userProfile,
+                messages: protectPendingChatTurn(expandHomeContextHistory(
+                    historyMsgsForPrompt.filter(message => message.id > contextHighWaterMark),
+                )),
+                material: recallMaterial, originalText: char.memoryPalaceInjection || '',
+                signal: input.signal,
+            })
+            : undefined;
+        if (recollection) {
+            char.memoryPalaceInjection = recollection.text;
+            if (recallTrace.injection) recallTrace.injection.memoryChars = recollection.text.length;
+        }
+        return { recallTrace, recollection };
+    });
 
     input.signal?.throwIfAborted();
     // ── 2. 解析音乐共听（如果 caller 没显式给，就从 snapshot 推） ──
@@ -596,6 +619,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         // 合并开关开着时多条 system 被并进开头一条，下标失去意义 → 交出 -1，调用方退回贴尾。
         volatileTailIndex: finalMessages === fullMessages ? volatileTailIndex : -1,
         amsg2ExpiredNoticeIds,
+        recollection,
         recallTrace,
         flags: { bilingualActive, mcdActive, luckinActive, luckinChatActive, mcpChatActive, htmlActive, thinkingActive, sarModuleActive: !!sarModuleBlock, promptBuildSkipped: false },
     };
