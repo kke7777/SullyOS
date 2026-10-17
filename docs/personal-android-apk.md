@@ -52,7 +52,7 @@ pnpm build:android
 - `NUOMI_KEY_ALIAS`：密钥名称。
 - `NUOMI_KEY_PASSWORD`：密钥密码。
 
-本次聊天生图版本的 Android versionCode 为 8（1.5.2-photo-save），包含模型拉取选择、保存到手机系统相册、xhigh 质量和新版日系二次元动漫风格生图指南，沿用原包的包名与签名，可以覆盖安装。
+本次记忆回忆整理版本的 Android versionCode 为 9（1.6.0-memory1017），包含聊天召回后二次加工、最近使用回忆查看页，并删除普通聊天规则的“2.5 对话质量”整节；保留已有生图、相册、语音与推送功能。沿用原包的包名与签名，可以覆盖安装。
 后续覆盖升级须使用同一签名并递增 versionCode。签名文件和密码不提交到仓库。
 本 APK 没有原作者的 ApkInstaller 插件，因此不接入原作者 APK 自动更新地址；更新包可手动覆盖安装。
 
