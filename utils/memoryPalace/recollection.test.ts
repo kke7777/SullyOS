@@ -6,6 +6,7 @@ import { waitForPalaceRequest } from './maintenanceMode';
 import { estimateContextTokens } from '../tokenEstimate';
 import { buildPromptBreakdown } from '../apiCallLog';
 import type { RecallMaterial } from './recallMaterial';
+import { readRecollectionReference } from './recollectionReference';
 
 const config = { baseUrl: 'https://secondary.example/v1', apiKey: 'test-secondary', model: 'writer' };
 const material: RecallMaterial = {
@@ -145,7 +146,9 @@ describe('recall recollection', () => {
         ] as any });
         const body = JSON.parse(String(fetch.mock.calls[0][1].body));
         expect(body.messages.filter((m: any) => m.role === 'assistant')).toEqual([]);
-        expect(body.messages.find((m: any) => m.content.includes('旧回复')).content).toContain('当前对话参考片段');
+        expect(readRecollectionReference(body.messages[1].content)).toEqual(expect.arrayContaining([
+            expect.objectContaining({ source: '当前对话参考片段', role: 'assistant', content: expect.stringContaining('旧回复') }),
+        ]));
         expect(result.narrative).toBe('那天我和小明在海边。');
         expect(result.secondaryOutput).toBe('那天我和小明在海边。');
         expect(body.messages.filter((m: any) => m.role === 'system')).toHaveLength(1);

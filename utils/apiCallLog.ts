@@ -17,6 +17,8 @@
  * 吞掉，绝不影响主请求链路。
  */
 
+import { RECOLLECTION_REFERENCE_PREFIX, readRecollectionReference } from './memoryPalace/recollectionReference';
+
 /** 调用方可补充的语义信息（哪个 App / 角色 / 用途）。能填多少填多少。 */
 export interface ApiCallMeta {
     /** AppID 字符串，如 'chat' / 'lifesim'，可空 */
@@ -473,17 +475,13 @@ const MAX_BREAKDOWN_BLOCKS = 48;
 const isRecalledMemoryMessage = (role: unknown, content: unknown): boolean =>
     role === 'user' && typeof content === 'string' && content.startsWith('本次召回记忆：\n');
 
-const RECOLLECTION_REFERENCE_PREFIX = '参考资料（角色设定、当前对话及补充设定）：\n';
-
 /** Read the writer's reference envelope for logging only; never rewrite the request. */
 function splitRecollectionReference(text: string): PromptBlockStat[] | undefined {
     if (!text.startsWith(RECOLLECTION_REFERENCE_PREFIX)) return undefined;
     const unsplit = [{ label: '回忆参考资料（未拆分）', chars: text.length }];
     try {
-        const entries: unknown = JSON.parse(text.slice(RECOLLECTION_REFERENCE_PREFIX.length));
-        if (!Array.isArray(entries) || !entries.every(entry => entry && typeof entry.content === 'string'
-            && ['角色与关系设定', '当前对话参考片段', '世界书补充设定'].includes(entry.source)
-            && ['system', 'user', 'assistant'].includes(entry.role))) return unsplit;
+        const entries = readRecollectionReference(text);
+        if (!entries) return unsplit;
         const totals = new Map<string, number>();
         let userCount = 0, assistantCount = 0, contentChars = 0;
         const add = (label: string, chars: number) => {

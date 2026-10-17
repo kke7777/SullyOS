@@ -20,11 +20,12 @@ import {
 } from './apiCallLog';
 import { formatWorldbookSection, resolveWorldbookEntries } from './worldbook';
 import { buildRecollectionPrompt } from './memoryPalace/recollection';
+import { formatRecollectionReference, type RecollectionReferenceEntry } from './memoryPalace/recollectionReference';
 
 describe('recollection reference breakdown', () => {
     const prefix = '参考资料（角色设定、当前对话及补充设定）：\n';
 
-    it.each([1, 1600])('separates settings and actual history, preserving all characters and the request (%i)', repeat => {
+    it.each([[1, false], [1600, false], [1, true], [1600, true]] as const)('separates settings and actual history, preserving all characters and the request (%i, compact=%s)', (repeat, compact) => {
         const character = '### 你的身份 (Character)\n露易丝，喜欢画画。\n## 性格\n温柔。\n';
         const world = '### 世界观与设定 (World Settings)\n住在巴黎。\n';
         const book = '### 世界书 · 示例消息后\n画室的窗台有鸢尾花。\n';
@@ -32,12 +33,13 @@ describe('recollection reference breakdown', () => {
         const historyUser = '## 聊天里自己写的标题\n还记得“那一天”吗？😀\\'.repeat(repeat);
         const historyAssistant = '记得，我们一起看过海。';
         const extraBook = '另一条在历史中插入的世界书。';
-        const reference = prefix + JSON.stringify([
+        const entries: RecollectionReferenceEntry[] = [
             { source: '角色与关系设定', role: 'system', content: character + world + book + user },
             { source: '当前对话参考片段', role: 'user', content: historyUser },
             { source: '世界书补充设定', role: 'assistant', content: extraBook },
             { source: '当前对话参考片段', role: 'assistant', content: historyAssistant },
-        ]);
+        ];
+        const reference = compact ? formatRecollectionReference(entries) : prefix + JSON.stringify(entries);
         const body = { messages: [
             { role: 'system', content: buildRecollectionPrompt('露易丝', '咲咲') },
             { role: 'user', content: reference },

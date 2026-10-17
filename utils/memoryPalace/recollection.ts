@@ -5,6 +5,7 @@ import { extractContent, safeFetchJson } from '../safeApi';
 import { truncateContextTokens } from '../tokenEstimate';
 import type { RecallMaterial } from './recallMaterial';
 import type { RecollectionSnapshot } from './recollectionSnapshot';
+import { formatRecollectionReference } from './recollectionReference';
 
 export const RECOLLECTION_TIMEOUT_MS = 30_000;
 export const RECOLLECTION_TOKEN_LIMIT = 2000;
@@ -113,10 +114,10 @@ export async function prepareRecollection(input: {
             controller.signal.throwIfAborted();
             const messages = [
                 { role: 'system', content: buildRecollectionPrompt(char.name, user.name || '用户') },
-                { role: 'user', content: `参考资料（角色设定、当前对话及补充设定）：\n${JSON.stringify(reference.map((message, index) => ({
+                { role: 'user', content: formatRecollectionReference(reference.map((message, index) => ({
                     source: index === 0 ? '角色与关系设定' : history.some(entry => entry === message) ? '当前对话参考片段' : '世界书补充设定',
                     role: message.role, content: message.content,
-                })))}` },
+                }))) },
                 { role: 'user', content: `本次召回记忆：\n${material.memoryText}` },
             ];
             const data = await safeFetchJson(`${api.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
