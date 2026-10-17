@@ -20,6 +20,26 @@ import {
 } from './apiCallLog';
 import { formatWorldbookSection, resolveWorldbookEntries } from './worldbook';
 
+describe('recalled-memory request visibility', () => {
+    it.each(['海边的日落', '## 海边旅行\n' + '那天一起看海。'.repeat(1200) + '\n## 回家的路\n我们撑着伞'])('shows the complete recalled batch separately from chat history', memory => {
+        const recalled = `本次召回记忆：\n${memory}`;
+        const messages = [
+            { role: 'user', content: '还记得那天吗？' },
+            { role: 'assistant', content: '记得呀。' },
+            { role: 'user', content: recalled },
+        ];
+        const breakdown = buildPromptBreakdown({ messages })!;
+        expect(breakdown).toContainEqual({ label: '本次召回记忆', chars: recalled.length });
+        expect(breakdown).toContainEqual({ label: '聊天历史·用户消息 ×1', chars: messages[0].content.length });
+        expect(breakdown.reduce((sum, block) => sum + block.chars, 0)).toBe(messages.reduce((sum, message) => sum + message.content.length, 0));
+        const capture = buildApiRequestCapture({ url: 'https://example.com/v1/chat/completions', body: { messages } });
+        const section = capture.sections.find(section => section.kind === 'memory')!;
+        expect(section).toMatchObject({ label: '本次召回记忆', messageIndex: 2, role: 'user', chars: recalled.length });
+        expect(getApiRequestCaptureSectionContent(capture, section)).toBe(recalled);
+        expect(capture.sections.filter(section => section.kind === 'memory')).toHaveLength(1);
+    });
+});
+
 describe('one-shot full API request capture', () => {
     it('uses the in-memory armed flag on the disabled hot path instead of reading localStorage per request', () => {
         vi.stubGlobal('localStorage', {

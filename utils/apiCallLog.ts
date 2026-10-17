@@ -469,6 +469,10 @@ export const isFixedPromptBlockLabel = (label: string): boolean =>
 
 const MAX_BREAKDOWN_BLOCKS = 48;
 
+// 二次整理把召回批次作为最后一条 user 消息发送，需与聊天历史分开展示。
+const isRecalledMemoryMessage = (role: unknown, content: unknown): boolean =>
+    role === 'user' && typeof content === 'string' && content.startsWith('本次召回记忆：\n');
+
 /**
  * 从 chat/completions 请求体算输入构成。解析不了 / 没有 messages 时返回 undefined。
  * system 逐块统计，历史消息按角色聚合（用户只关心"内置注入哪块肥"，不关心第几条历史）。
@@ -494,7 +498,9 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
             if (msg?.role === 'system') {
                 out.push(...splitSystemBlocks(text));
             } else if (msg?.role === 'user') {
-                if (text.length > HUGE_USER_MSG_SPLIT_CHARS && countBlockHeaders(text) >= 2) {
+                if (isRecalledMemoryMessage(msg.role, text)) {
+                    out.push({ label: '本次召回记忆', chars: text.length });
+                } else if (text.length > HUGE_USER_MSG_SPLIT_CHARS && countBlockHeaders(text) >= 2) {
                     out.push(...splitSystemBlocks(text));
                 } else {
                     userChars += text.length; userCount++;
@@ -726,6 +732,19 @@ export function buildApiRequestCapture(input: {
         const message: Record<string, unknown> = rawMessage && typeof rawMessage === 'object' ? rawMessage as Record<string, unknown> : { content: rawMessage };
         const role = typeof message.role === 'string' ? message.role : 'unknown';
         const content = message.content;
+        if (typeof content === 'string' && isRecalledMemoryMessage(role, content)) {
+            sections.push({
+                id: `message-${messageIndex}`,
+                label: '本次召回记忆',
+                kind: 'memory',
+                chars: content.length,
+                source: CAPTURE_SOURCE_DESCRIPTIONS.memory,
+                path: `messages[${messageIndex}].content`,
+                role,
+                messageIndex,
+            });
+            return;
+        }
         const shouldSplit = typeof content === 'string' && (
             role === 'system' || (content.length > 8000 && splitCaptureTextBlocks(content).length > 1)
         );

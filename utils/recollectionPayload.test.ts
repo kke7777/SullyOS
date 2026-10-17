@@ -38,6 +38,23 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
 
+it.each(['整理后的回忆', ''])('keeps the memory stage open through the entire secondary call, including empty-result fallback (%s)', async text => {
+    let release!: () => void, started!: () => void;
+    const waiting = new Promise<void>(resolve => { started = resolve; });
+    const response = new Promise<Response>(resolve => { release = () => resolve(new Response(JSON.stringify({ choices: [{ message: { content: text } }] }))); });
+    vi.stubGlobal('fetch', vi.fn(() => { started(); return response; }));
+    const stages: string[] = [];
+    const pending = buildChatRequestPayload({ ...input(), onPreparationStage: event => {
+        if (event.stage === 'memory') stages.push(event.status);
+    } });
+    await waiting;
+    expect(stages).toEqual(['start']);
+    release();
+    const result = await pending;
+    expect(stages).toEqual(['start', 'end']);
+    expect(result.recollection?.status).toBe(text ? 'refined' : 'fallback');
+});
+
 it.each(['chat_app', 'home_3d', 'proactive_chat'] as const)('uses the prepared batch exactly once for %s and saves at the main transport dispatch', async entry => {
     const previous = { charId: input().char.id, text: '上一次真正使用的回忆', sources: [], status: 'refined' as const };
     saveUsedRecollection(previous);

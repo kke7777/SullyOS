@@ -4,6 +4,7 @@ import { prepareRecollection, RECOLLECTION_TIMEOUT_MS, buildRecollectionPrompt }
 import { createRecollectionDispatch, readUsedRecollection, saveUsedRecollection } from './recollectionSnapshot';
 import { waitForPalaceRequest } from './maintenanceMode';
 import { estimateContextTokens } from '../tokenEstimate';
+import { buildPromptBreakdown } from '../apiCallLog';
 import type { RecallMaterial } from './recallMaterial';
 
 const config = { baseUrl: 'https://secondary.example/v1', apiKey: 'test-secondary', model: 'writer' };
@@ -39,6 +40,8 @@ describe('recall recollection', () => {
         expect(url).toBe(config.baseUrl + '/chat/completions');
         expect(init.headers.Authorization).toBe('Bearer test-secondary');
         expect(body.model).toBe('writer');
+        expect(body.messages.at(-1)).toEqual({ role: 'user', content: `本次召回记忆：\n${material.memoryText}` });
+        expect(buildPromptBreakdown(body)).toContainEqual({ label: '本次召回记忆', chars: body.messages.at(-1).content.length });
         const sent = JSON.stringify(body.messages);
         for (const text of ['核心设定', '海边小镇', '用户设定', '还记得那次看海吗', '2026-09-01', '800—1200字']) expect(sent).toContain(text);
         expect(sent).not.toContain('置顶便利贴');

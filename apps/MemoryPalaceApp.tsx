@@ -62,9 +62,9 @@ import {
 
 const PixelHomeView = React.lazy(() => import('./pixelHome/PixelHomeView'));
 
-function CharacterHomePages({pixel=false,onChange}:{pixel?:boolean;onChange:(page:'palace'|'pixelHome')=>void}) {
+function CharacterHomePages({pixel=false,onChange}:{pixel?:boolean;onChange:(page:'palace'|'pixelHome'|'recollection')=>void}) {
     return <nav aria-label="角色房间页面" style={{display:'flex',gap:4,padding:4,margin:'12px 0',borderRadius:14,background:pixel?'#1e293b':'#f3f0fa'}}>
-        {([{id:'palace',label:'记忆房间'},{id:'pixelHome',label:'像素家园'}] as const).map(page=><button key={page.id} type="button" aria-pressed={(page.id==='pixelHome')===pixel} onClick={()=>onChange(page.id)} style={{flex:1,padding:'10px 8px',border:0,borderRadius:10,fontSize:12,fontWeight:600,cursor:'pointer',background:(page.id==='pixelHome')===pixel?(pixel?'#475569':'#fff'):'transparent',color:pixel?'#e2e8f0':'#715588'}}>{page.label}</button>)}
+        {([{id:'palace',label:'记忆房间'},{id:'pixelHome',label:'像素家园'},{id:'recollection',label:'最近使用的回忆'}] as const).map(page=><button key={page.id} type="button" aria-pressed={page.id===(pixel?'pixelHome':'palace')} onClick={()=>onChange(page.id)} style={{flex:1,padding:'10px 8px',border:0,borderRadius:10,fontSize:12,fontWeight:600,cursor:'pointer',background:page.id===(pixel?'pixelHome':'palace')?(pixel?'#475569':'#fff'):'transparent',color:pixel?'#e2e8f0':'#715588'}}>{page.label}</button>)}
     </nav>;
 }
 
@@ -2593,6 +2593,14 @@ export default function MemoryPalaceApp() {
                                             )}
                                         </div>
 
+                                        <button
+                                            type="button"
+                                            onClick={() => { setActiveCharacterId(c.id); setView('recollection'); }}
+                                            style={{ padding: '11px 12px', borderRadius: 12, border: '1px solid #ede9fe', background: '#faf5ff', color: '#7c3aed', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                                        >
+                                            最近使用的回忆 →
+                                        </button>
+
                                         {/* 分隔线 */}
                                         <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #ede9fe, transparent)' }} />
 
@@ -3166,6 +3174,11 @@ export default function MemoryPalaceApp() {
                         {isGlobal ? '所有角色共用同一套 API · 与角色无关' : '仅对当前角色生效'}
                     </div>
                 </div>
+
+                {!isGlobal && <button type="button" onClick={() => setView('recollection')}
+                    style={{ width: '100%', padding: '12px 16px', marginBottom: 16, borderRadius: 12, border: '1px solid #ede9fe', background: '#faf5ff', color: '#7c3aed', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    最近使用的回忆 →
+                </button>}
 
                 </>}
                 {/* 费用警告 */}
@@ -5042,10 +5055,6 @@ create table if not exists memory_vectors (
                             <Icon name="box" size={13} />
                             <span>查看事件盒</span>
                         </div>
-                        <button type="button" onClick={() => setView('recollection')}
-                            style={{ fontSize: 11, fontWeight: 600, color: '#7c3aed', padding: '4px 12px', borderRadius: 8, border: '1px solid #e9e5ff', background: '#f8f6ff', cursor: 'pointer' }}>
-                            最近使用的回忆
-                        </button>
                     </div>
 
                     <CharacterHomePages onChange={setView} />

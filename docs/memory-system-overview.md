@@ -301,10 +301,12 @@ TA第一次对我说……我当时心里……
 私聊在 `safeFetchJson` 发送前落记录；即时对话在加密、压缩等准备结束后、
 `/instant-chat` POST 发出前落记录；3D 家园与本地主动私聊使用同一份已准备结果。
 情绪评估直接复用主请求提示词，不额外整理或覆盖记录。
-宫殿首页的「最近使用的回忆」可查看，重开 App 仍保留。
+宫殿选角页的角色卡片、角色房间导航、像素家园及角色设置页的「最近使用的回忆」可查看，重开 App 仍保留。
+副 API 的最后一条 user 消息携带本次召回批次；调用记录输入构成与完整请求查看均将其单列为「本次召回记忆」，不并入聊天历史统计。
+聊天头像旁的状态随实际阶段切换：召回与副 API 整理期间显示「露易丝在回忆ing」，主回复请求发出后显示「露露打字ing」。阶段按角色保留，切出聊天再进入仍可读取；结束、失败或停止时随本轮占位一起清除。其他角色使用各自名称。未开启宫殿时直接进入回复阶段，不显示回忆提示。
 
 验证：`recollection.test.ts`、`recallMaterial.test.ts`、`recollectionPayload.test.ts`、
-`amsgInstantChat.test.ts`；页面夹具见 `test/fixtures/recollection.html`。
+`amsgInstantChat.test.ts`、`apiCallLog.test.ts`；独立页面夹具见 `test/fixtures/recollection.html`，实际宫殿入口夹具见 `test/fixtures/recollection-app.html`。
 
 ### 四、认知消化过程（高级仿脑机制）
 

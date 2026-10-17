@@ -33,7 +33,7 @@ import { buildToolResultMessage, normalizeToolCallsForCompat } from '../utils/to
 import { toolCallFingerprint } from '../utils/agenticToolFeedback';
 import { buildChatRequestPayload } from '../utils/chatRequestPayload';
 import { createRecollectionDispatch } from '../utils/memoryPalace/recollectionSnapshot';
-import { acquireChatReply, isChatReplyActive, subscribeChatReplies } from '../utils/chatReplyLock';
+import { acquireChatReply, getChatReplyPhase, subscribeChatReplies } from '../utils/chatReplyLock';
 import { prepareInboxBeforeChat } from '../utils/activeMsgRuntime';
 import { hasUnansweredUserTurn, withChatContinuation } from '../utils/chatContinuation';
 import { assertChatHasDialogue } from '../utils/chatRequestGuard';
@@ -524,7 +524,8 @@ export const useChatAI = ({
     const music = useMusic();
 
     const [localTyping, setLocalTyping] = useState(false);
-    const characterTyping = useSyncExternalStore(subscribeChatReplies, () => isChatReplyActive(char?.id), () => false);
+    const replyPhase = useSyncExternalStore(subscribeChatReplies, () => getChatReplyPhase(char?.id), () => null);
+    const characterTyping = replyPhase !== null;
     // 同一挂载实例仍串行使用流式预览状态；跨页面重进则读取角色的后台占位。
     const isTyping = localTyping || characterTyping;
     // 流式预览气泡：stream 开启时，已完成行与安全尾句随增量以临时气泡上屏。
@@ -933,10 +934,20 @@ export const useChatAI = ({
                 luckinChat: luckinChatOn ? luckinChatRef?.current : undefined,
                 timelyByWorker: instantChatRoute,
                 recallEntryPoint: 'chat_app',
-                onPreparationStage:event=>{if(event.status==='end')perfStages['payload.'+event.stage]=event.ms;},
+                onPreparationStage: event => {
+                    if (event.status === 'end') perfStages['payload.' + event.stage] = event.ms;
+                    if (event.stage === 'memory' && charForGen.memoryPalaceEnabled && !replyRun.signal.aborted) {
+                        releaseReply.setPhase(event.status === 'start' ? 'recollecting' : 'preparing');
+                    }
+                },
             })));
             const systemPrompt = payload.systemPrompt;
-            const dispatchRecollection = createRecollectionDispatch(payload.recollection);
+            const saveRecollection = createRecollectionDispatch(payload.recollection);
+            const dispatchRecollection = () => {
+                replyRun.check();
+                releaseReply.setPhase('replying');
+                saveRecollection();
+            };
             const cleanedApiMessages = payload.cleanedApiMessages;
             // 在续说补丁和本地/即时对话分流前检查最终历史，不能用补出来的 user 掩盖空上下文。
             assertChatHasDialogue(payload.fullMessages);
@@ -2339,6 +2350,7 @@ export const useChatAI = ({
 
     return {
         isTyping,
+        replyPhase,
         streamingBubbles,
         streamingThinking,
         streamingHandoverIds,
