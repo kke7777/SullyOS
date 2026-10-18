@@ -4,6 +4,7 @@ import * as palace from './memoryPalace/pipeline';
 import { safeFetchJson } from './safeApi';
 import { createRecollectionDispatch, readUsedRecollection, saveUsedRecollection } from './memoryPalace/recollectionSnapshot';
 import type { RecallMaterial } from './memoryPalace/recallMaterial';
+import { readRecollectionReference } from './memoryPalace/recollectionReference';
 
 const batch: RecallMaterial = {
     originalText: '原始召回标记', memoryText: '2026-09-01 原始往事标记',
@@ -41,6 +42,41 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clea
 function writingResponse(_body: any, text: string) {
     return new Response(JSON.stringify({ choices: [{ message: { content: text } }] }));
 }
+
+it.each([
+    { name: 'long visible range', hwm: 20, breakpoint: undefined, last: 90, first: 31 },
+    { name: 'waterline leaves fewer than 60', hwm: 75, breakpoint: undefined, last: 90, first: 76 },
+    { name: 'user breakpoint leaves fewer than 60', hwm: 20, breakpoint: 80, last: 90, first: 80 },
+    { name: 'regeneration snapshot ends at its target turn', hwm: 20, breakpoint: undefined, last: 75, first: 21 },
+    { name: 'empty post-waterline range', hwm: 90, breakpoint: undefined, last: 90, first: 91 },
+])('caps only secondary chat after range selection: $name', async scenario => {
+    let body: any;
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+        body = JSON.parse(String(init.body));
+        return writingResponse(body, '整理后的回忆');
+    }));
+    const args = input();
+    Object.assign(args.char, { contextLimit: 100, contextRangePolicyVersion: 1, contextUserStartMessageId: scenario.breakpoint });
+    args.contextLimit = 100;
+    args.contextHighWaterMark = scenario.hwm;
+    args.historyMsgs = Array.from({ length: scenario.last }, (_, i) => ({
+        id: i + 1, role: i % 2 ? 'assistant' : 'user', type: 'text',
+        content: `范围标记${i + 1}结束`, timestamp: (i + 1) * 100,
+    }));
+    // Stale UI hints must not backfill archived, excluded, or future bubbles.
+    const recentMsgsHint = [...args.historyMsgs, { id: 999, role: 'user', type: 'text', content: '未来消息不得进入', timestamp: 99900 }] as any[];
+    const before = JSON.stringify(args.historyMsgs);
+    const result = await buildChatRequestPayload({ ...args, recentMsgsHint });
+    const entries = readRecollectionReference(body.messages[1].content)!;
+    const chat = entries.filter(entry => entry.source === '当前对话参考片段');
+    const numbers = (value: unknown) => [...JSON.stringify(value).matchAll(/范围标记(\d+)结束/g)].map(match => Number(match[1]));
+    const sequence = (first: number) => Array.from({ length: Math.max(0, scenario.last - first + 1) }, (_, i) => first + i);
+    expect(numbers(chat)).toEqual(sequence(scenario.first));
+    expect(numbers(result.cleanedApiMessages)).toEqual(sequence(scenario.breakpoint ?? 1));
+    expect(JSON.stringify(body.messages)).not.toContain('未来消息不得进入');
+    expect(body.messages.at(-1).content).toBe(`本次召回记忆：\n${batch.memoryText}`);
+    expect(JSON.stringify(args.historyMsgs)).toBe(before);
+});
 
 it.each(['整理后的回忆', ''])('keeps the memory stage open through the entire secondary call, including empty-result fallback (%s)', async text => {
     let release!: () => void, started!: () => void;

@@ -9,6 +9,7 @@ import { formatRecollectionReference } from './recollectionReference';
 
 export const RECOLLECTION_TIMEOUT_MS = 30_000;
 export const RECOLLECTION_TOKEN_LIMIT = 2000;
+export const RECOLLECTION_HISTORY_LIMIT = 60;
 
 /** Reject the observed wrong-task shapes; normal narration may still quote past dialogue. */
 export function recollectionOutputProblem(content: string, material: RecallMaterial, names: string[]): string | undefined {
@@ -72,6 +73,9 @@ export async function prepareRecollection(input: {
         role: message.role,
         content: formatMessageForPrompt(message, char.name, user.name || '用户'),
     }));
+    // Both speakers share one bubble budget, inside the caller's already-visible range.
+    const historySet = new Set<object>(history);
+    const recentHistorySet = new Set<object>(history.slice(-RECOLLECTION_HISTORY_LIMIT));
     signal?.throwIfAborted();
     const original: RecollectionSnapshot = {
         charId: char.id, text: input.originalText, sources: material?.sources ?? [],
@@ -118,10 +122,13 @@ export async function prepareRecollection(input: {
                 layout: { deferVolatile: true, omitMemoryBank: true }, timeOptions: { skipTimeAwareness: true },
             }, history);
             controller.signal.throwIfAborted();
+            // Resolve worldbooks with the original range, then trim only chat references.
+            // Identity and worldbook entries never consume the 60-bubble budget.
+            const limitedReference = reference.filter(message => !historySet.has(message) || recentHistorySet.has(message));
             const messages = [
                 { role: 'system', content: buildRecollectionPrompt(char.name, user.name || '用户') },
-                { role: 'user', content: formatRecollectionReference(reference.map((message, index) => ({
-                    source: index === 0 ? '角色与关系设定' : history.some(entry => entry === message) ? '当前对话参考片段' : '世界书补充设定',
+                { role: 'user', content: formatRecollectionReference(limitedReference.map((message, index) => ({
+                    source: index === 0 ? '角色与关系设定' : historySet.has(message) ? '当前对话参考片段' : '世界书补充设定',
                     role: message.role, content: message.content,
                 }))) },
                 { role: 'user', content: `本次召回记忆：\n${material.memoryText}` },

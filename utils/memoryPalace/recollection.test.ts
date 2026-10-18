@@ -7,6 +7,7 @@ import { estimateContextTokens } from '../tokenEstimate';
 import { buildPromptBreakdown } from '../apiCallLog';
 import type { RecallMaterial } from './recallMaterial';
 import { readRecollectionReference } from './recollectionReference';
+import { formatMessageForPrompt } from '../messageFormat';
 
 const config = { baseUrl: 'https://secondary.example/v1', apiKey: 'test-secondary', model: 'writer' };
 const material: RecallMaterial = {
@@ -31,6 +32,52 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); localStorage.clear(); });
 
 describe('recall recollection', () => {
+    it.each([0, 1, 59, 60, 61, 125])('sends only the latest 60 visible chat bubbles, sharing the budget across speakers (%i)', async count => {
+        const bubbles = Array.from({ length: count }, (_, i) => ({
+            id: i + 1, role: i % 3 ? 'assistant' : 'user', type: 'text',
+            content: `气泡${i + 1}正文\n第二行`, timestamp: i + 1,
+        }));
+        const messages = bubbles.flatMap(bubble => [bubble, { id: 1000 + bubble.id, role: 'system', type: 'text', content: '非聊天消息' }]);
+        const args = { ...input(), messages: messages as any[] };
+        const before = JSON.stringify(args);
+        const fetch = vi.fn(async () => response('那天我们在海边。'));
+        vi.stubGlobal('fetch', fetch);
+        await prepareRecollection(args);
+        const body = JSON.parse(String((fetch.mock.calls[0] as any)[1].body));
+        const entries = readRecollectionReference(body.messages[1].content)!;
+        const chat = entries.filter(entry => entry.source === '当前对话参考片段');
+        expect(chat.map(entry => [entry.role, entry.content])).toEqual(bubbles.slice(-60).map(bubble => [
+            bubble.role, formatMessageForPrompt(bubble as any, args.char.name, args.user.name),
+        ]));
+        expect(entries[0].content).toContain('核心设定');
+        expect(body.messages.at(-1).content).toBe(`本次召回记忆：\n${material.memoryText}`);
+        expect(JSON.stringify(args)).toBe(before);
+    });
+
+    it.each([[0, 'system'], [1, 'user'], [2, 'assistant']] as const)('preserves worldbook triggers and depth entries outside the retained chat window (%i, %s)', async (role, roleName) => {
+        const args = input();
+        args.messages = Array.from({ length: 70 }, (_, i) => ({
+            id: i + 1, role: i % 2 ? 'assistant' : 'user', type: 'text',
+            content: i === 0 ? '早期触发词' : `最近消息${i + 1}`, timestamp: i + 1,
+        }));
+        args.char.mountedWorldbooks = [
+            { id: 'early-trigger', title: '早期设定', content: '由旧气泡触发的世界书', constant: false, key: ['早期触发词'], scanDepth: 100, position: 1 },
+            { id: 'deep-entry', title: '深度设定', content: '深度世界书原文', constant: true, position: 4, depth: 65, role },
+        ];
+        const fetch = vi.fn(async () => response('那天我们在海边。'));
+        vi.stubGlobal('fetch', fetch);
+        await prepareRecollection(args);
+        const body = JSON.parse(String((fetch.mock.calls[0] as any)[1].body));
+        const entries = readRecollectionReference(body.messages[1].content)!;
+        expect(entries[0].content).toContain('由旧气泡触发的世界书');
+        expect(entries).toContainEqual(expect.objectContaining({ source: '世界书补充设定', role: roleName, content: expect.stringContaining('深度世界书原文') }));
+        const chat = entries.filter(entry => entry.source === '当前对话参考片段');
+        expect(chat).toHaveLength(60);
+        expect(chat[0].content).toContain('最近消息11');
+        expect(chat.at(-1)?.content).toContain('最近消息70');
+        expect(JSON.stringify(chat)).not.toContain('早期触发词');
+    });
+
     it('sends one batch with identity/worldview/user/visible history, retaining constant blocks', async () => {
         const fetch = vi.fn(async (_url, init) => response('那天我和小明一起坐在海边，等太阳慢慢落下去。', {}, init));
         vi.stubGlobal('fetch', fetch);
