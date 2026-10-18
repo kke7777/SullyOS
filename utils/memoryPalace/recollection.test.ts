@@ -44,7 +44,7 @@ describe('recall recollection', () => {
         expect(body.messages.at(-1)).toEqual({ role: 'user', content: `本次召回记忆：\n${material.memoryText}` });
         expect(buildPromptBreakdown(body)).toContainEqual({ label: '本次召回记忆', chars: body.messages.at(-1).content.length });
         const sent = JSON.stringify(body.messages);
-        for (const text of ['核心设定', '海边小镇', '用户设定', '还记得那次看海吗', '2026-09-01', '800—1200字']) expect(sent).toContain(text);
+        for (const text of ['核心设定', '海边小镇', '用户设定', '还记得那次看海吗', '2026-09-01', '1000—1600字']) expect(sent).toContain(text);
         expect(sent).not.toContain('置顶便利贴');
         expect(result.status).toBe('refined');
         expect(result.text).toBe(material.prefix + '那天我和小明一起坐在海边，等太阳慢慢落下去。\n\n' + material.suffix);
@@ -134,7 +134,7 @@ describe('recall recollection', () => {
     it('uses the approved prompt wording', () => {
         const prompt = buildRecollectionPrompt('角色', '小明');
         expect(prompt.startsWith('你是角色，正在回忆与小明有关的往事。')).toBe(true);
-        expect(prompt.endsWith('直接输出回忆正文。')).toBe(true);
+        expect(prompt.endsWith('只输出回忆正文，不写接下来如何回复对方的建议或计划。')).toBe(true);
     });
 
     it('keeps roleplay instructions and prior assistant replies in reference data, with only the writing task at system priority', async () => {

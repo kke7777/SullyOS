@@ -542,7 +542,9 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
         for (const msg of messages) {
             const text = contentToText(msg?.content);
             if (msg?.role === 'system') {
-                if (recollectionRequest && text.includes('本次只完成私人回忆的写作。')) {
+                // This request carries its writing task in system and all references in user.
+                // Classify by the reference envelope, not wording that users may revise.
+                if (recollectionRequest) {
                     out.push({ label: '回忆写作任务', chars: text.length });
                 } else out.push(...splitSystemBlocks(text));
             } else if (msg?.role === 'user') {
