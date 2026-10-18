@@ -7,7 +7,7 @@ import type { RecallMaterial } from './recallMaterial';
 import type { RecollectionSnapshot } from './recollectionSnapshot';
 import { formatRecollectionReference } from './recollectionReference';
 
-export const RECOLLECTION_TIMEOUT_MS = 30_000;
+export const RECOLLECTION_TIMEOUT_MS = 120_000;
 export const RECOLLECTION_TOKEN_LIMIT = 2000;
 export const RECOLLECTION_HISTORY_LIMIT = 60;
 
@@ -153,7 +153,7 @@ export async function prepareRecollection(input: {
         return await Promise.race([work(), deadline]);
     } catch {
         signal?.throwIfAborted();
-        return { ...fallback, fallbackReason: controller.signal.aborted ? '回忆整理等待超时，已使用召回原文。' : '副 API 请求失败，已使用召回原文。' };
+        return { ...fallback, fallbackReason: controller.signal.aborted ? '整理超时，已使用召回原记忆。' : '副 API 请求失败，已使用召回原文。' };
     } finally {
         if (timer) clearTimeout(timer);
         if (abortParent) signal?.removeEventListener('abort', abortParent);

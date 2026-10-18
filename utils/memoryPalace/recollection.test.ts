@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContextBuilder } from '../context';
-import { prepareRecollection, RECOLLECTION_TIMEOUT_MS, buildRecollectionPrompt, recollectionOutputProblem } from './recollection';
+import { prepareRecollection, buildRecollectionPrompt, recollectionOutputProblem } from './recollection';
 import { createRecollectionDispatch, readUsedRecollection, saveUsedRecollection } from './recollectionSnapshot';
 import { waitForPalaceRequest } from './maintenanceMode';
 import { estimateContextTokens } from '../tokenEstimate';
@@ -132,6 +132,23 @@ describe('recall recollection', () => {
         expect(fetch).not.toHaveBeenCalled();
     });
 
+    it('accepts a complete response after 30 seconds without waiting for the 120-second deadline', async () => {
+        vi.useFakeTimers();
+        let finish!: (value: Response) => void;
+        let requestSignal!: AbortSignal;
+        const fetch = vi.fn((_url: string, init: RequestInit) => {
+            requestSignal = init.signal!;
+            return new Promise<Response>(resolve => { finish = resolve; });
+        });
+        vi.stubGlobal('fetch', fetch);
+        const pending = prepareRecollection(input());
+        await vi.advanceTimersByTimeAsync(45_000);
+        expect(requestSignal.aborted).toBe(false);
+        finish(response('那天我和小明在海边看日落。'));
+        expect(await pending).toMatchObject({ status: 'refined', narrative: '那天我和小明在海边看日落。' });
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
     it('bounds a response that sends headers immediately but never finishes its body; late text cannot overwrite', async () => {
         vi.useFakeTimers();
         let finish!: () => void;
@@ -143,8 +160,11 @@ describe('recall recollection', () => {
             } }), { headers: { 'Content-Type': 'application/json' } });
         }));
         const pending = prepareRecollection(input());
-        await vi.advanceTimersByTimeAsync(RECOLLECTION_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(119_999);
+        expect(requestSignal.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
         const result = await pending;
+        expect(result.fallbackReason).toBe('整理超时，已使用召回原记忆。');
         expect(result).toMatchObject({ status: 'fallback', text: material.originalText });
         expect(requestSignal.aborted).toBe(true);
         saveUsedRecollection(result);
@@ -158,8 +178,8 @@ describe('recall recollection', () => {
         localStorage.setItem('os_memory_palace_config', JSON.stringify({ lightLLM: config, manualMaintenance: true, maintenanceIntervalSeconds: 60 }));
         await waitForPalaceRequest();
         const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
-        const pending = prepareRecollection(input());
-        await vi.advanceTimersByTimeAsync(RECOLLECTION_TIMEOUT_MS);
+        const pending = prepareRecollection({ ...input(), timeoutMs: 30_000 });
+        await vi.advanceTimersByTimeAsync(30_000);
         expect((await pending).status).toBe('fallback');
         await vi.advanceTimersByTimeAsync(60_000);
         expect(fetch).not.toHaveBeenCalled();
