@@ -437,7 +437,10 @@ describe('buildPromptBreakdown', () => {
             '聊天历史·用户消息 ×2',
             '聊天历史·角色消息 ×1',
         ]);
-        // 字数守恒：system 各块之和 = 原文长度 + 每行换行补偿
+        // 字数守恒：只计算请求中实际存在的字符和换行。
+        expect(blocks.reduce((sum, block) => sum + block.chars, 0)).toBe(
+            JSON.parse(body).messages.reduce((sum: number, message: { content: string }) => sum + message.content.length, 0),
+        );
         const memBlock = blocks.find(b => b.label.startsWith('记忆系统'))!;
         expect(memBlock.chars).toBeGreaterThan(0);
         expect(blocks.find(b => b.label === '聊天历史·用户消息 ×2')!.chars).toBe(4);
@@ -468,7 +471,7 @@ describe('buildPromptBreakdown', () => {
         expect(buildPromptBreakdown(undefined)).toBeUndefined();
     });
 
-    it('病态多块时合并尾巴限容', () => {
+    it('病态多块时合并较小项限容', () => {
         const sys = Array.from({ length: 80 }, (_, i) => `### 块${i}\n内容${i}`).join('\n');
         const blocks = buildPromptBreakdown({ messages: [{ role: 'system', content: sys }] })!;
         expect(blocks.length).toBeLessThanOrEqual(48);

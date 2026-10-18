@@ -735,7 +735,7 @@ const CaptureSectionContent: React.FC<{ content: string; mono?: boolean; onCopy:
 );
 
 /**
- * 输入构成面板：按字数降序列出每块（system 的 ### 段落 / 聚合的聊天历史），
+ * 输入构成面板：按字数降序列出资料类别（兼容旧版标题分块 / 聚合的聊天历史），
  * 附占比条 + 按字符占比折算的 token 估算（分词器差异下只是量级参考，不是精确值）。
  */
 const PromptBreakdownView: React.FC<{ blocks: PromptBlockStat[]; promptTokens?: number }> = ({ blocks, promptTokens }) => {
@@ -759,6 +759,11 @@ const PromptBreakdownView: React.FC<{ blocks: PromptBlockStat[]; promptTokens?: 
                     <span className="text-[9px] text-slate-300">token 列为按字符占比折算的估算</span>
                 )}
             </div>
+            {blocks.some(block => /^（其余 \d+ 块合计）$/.test(block.label)) && (
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                    这条旧记录只保存了合计值，无法还原其中各项；更新后新产生的主聊天记录会按资料类别分别统计。
+                </p>
+            )}
             {rows.map((b, i) => {
                 const pct = (b.chars / totalChars) * 100;
                 const estTok = promptTokens != null ? Math.round(promptTokens * b.chars / totalChars) : null;
