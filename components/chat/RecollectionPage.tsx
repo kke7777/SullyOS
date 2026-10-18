@@ -26,9 +26,9 @@ export default function RecollectionPage({ charId, charName, onBack }: {
         style={{ paddingTop: 'calc(var(--safe-top, 0px) + 16px)' }}>
         <button type="button" onClick={onBack} className="py-2 text-sm font-medium text-violet-600">← 返回记忆宫殿</button>
         <h2 className="mt-3 text-lg font-bold">{charName} · 最近使用的回忆</h2>
-        <p className="mt-2 text-xs leading-6 text-slate-500">查看最近一次聊天请求实际使用的记忆文字与召回条目。</p>
+        <p className="mt-2 text-xs leading-6 text-slate-500">查看最近一次聊天或通话请求实际使用的记忆文字与召回条目。</p>
         {!snapshot ? <div className="mt-6 rounded-2xl bg-white p-5 text-sm leading-7 text-slate-500">
-            还没有使用记录。开启记忆宫殿后，下一次聊天请求发出时会在这里留下记录。
+            还没有使用记录。开启记忆宫殿后，下一次聊天或通话请求发出时会在这里留下记录。
         </div> : <>
             <div className="mt-5 rounded-2xl bg-white p-4">
                 <p className={`text-sm font-semibold ${snapshot.status === 'fallback' ? 'text-amber-700' : 'text-violet-700'}`}>{status}</p>

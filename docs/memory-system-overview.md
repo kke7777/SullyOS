@@ -283,7 +283,7 @@ TA第一次对我说……我当时心里……
 私聊（本地生成与即时对话上云）、3D 家园交流、本地主动私聊在统一
 `buildChatRequestPayload` 中，对本轮召回并展开的往事调用一次宫殿副 API。
 入库、检索排序、话题盒展开和房间门牌保持既有行为；便利贴、窗台期盼原样注入，
-不参与往事整理。其他 App 的独立召回与后台定时任务模板保持原流程。
+不参与往事整理。语音／视频通话通过 `callRecollection.ts` 接入同一个整理器；其他 App 的独立召回与后台定时任务模板保持原流程。
 
 `formatter.ts` 可同时交出 `RecallMaterial`：本轮原文、往事段、常驻段与来源名称。
 `recollection.ts` 使用现有 `lightLLM` 配置，经 `ContextBuilder.buildCharacterRequest`
@@ -492,3 +492,9 @@ ContextBuilder 的 buildCoreContext、buildVolatileCoreState、buildRoleSettings
 ## 新手记忆说明
 
 首次引导最后一步与 FAQ 共用 `utils/memoryGuide.ts`，说明私聊/通话/见面共享原文、群聊近期片段与话题盒/个人记忆、其他 App 卡片回流及全自动配置。手动归档的旧 `hideBeforeMessageId` 仅服务旧归档内部，不能代替当前用户断点；如需缩小 AI 原文，入口为聊天「＋ → 设置 → 上下文与记忆 → 查看原文范围 / 设置用户断点」，短按保留的第一条消息。隐藏不删除记录。
+
+### 通话召回整理
+
+语音与视频共用 `requestAssistantReply`：接通开场、正常发言、重生成和静默续话均在主请求前整理本轮召回。只重新播放／合成音频不触发整理。每轮只读取一次公共上下文范围，副 API 使用水位快照后原文与本轮输入（合计最多 60 个气泡），摄像头快照仍只交给主通话模型。重生成排除被替换回答及之后消息。
+
+角色注入使用请求私有副本；关闭宫殿不会复用残留召回。无往事材料不调用副 API；失败／超时沿用完整原召回。挂断、切换或新请求取消旧轮准备；视频图片拒绝后的文字重试复用同一份回忆，不重复整理。主请求实际发送时通过 `createRecollectionDispatch` 更新最近使用记录。验证：`callRecollection.test.ts` 与现有整理器、通话快照和运行时引用测试。

@@ -1,5 +1,6 @@
 import { resolveDialogueApi } from '../utils/characterApi';
-import { loadCharacterContextMessages } from '../utils/chatContextRange';
+import { loadCharacterContextRange } from '../utils/chatContextRange';
+import { prepareCallRecollection } from '../utils/memoryPalace/callRecollection';
 import { canAnalyzeVoiceSource, isVoiceAudioPriming, primeVoiceAudio, voicePlaybackErrorMessage } from '../utils/voicePlayback';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Microphone, SpeakerHigh, SpeakerSlash, PhoneDisconnect, Translate, Gear, Clock, CaretLeft, CaretRight, Phone, VideoCamera, VideoCameraSlash, Cube, FolderOpen, FileZip, Moon, Sun, Check, ArrowsClockwise } from '@phosphor-icons/react';
@@ -18,9 +19,6 @@ import { CANTONESE_VOICE_SUPPORT_NOTE, VOICE_LANGUAGE_OPTIONS, voiceLanguageAnal
 import { startStt, isSttSupported, type SttSession } from '../utils/speechToText';
 import { ContextBuilder } from '../utils/context';
 import { resolveCharTimeZone } from '../utils/timezone';
-import {
-  injectMemoryPalace,
-} from '../utils/memoryPalace/pipeline';
 import { processNewMessagesWithAutoArchive } from '../utils/memoryPalace/autoArchive';
 import { incrementDigestRound, runCognitiveDigestion } from '../utils/memoryPalace';
 import { RealtimeContextManager } from '../utils/realtimeContext';
@@ -1709,6 +1707,7 @@ const CallApp: React.FC = () => {
     beginSelectedCall(setupCameraMode);
   };
   const finishCall = async () => {
+    callTextAbortRef.current?.abort();
     if (selectedChar?.id) {
       const userTurns = bubbles.filter(b => b.role === 'user').length;
       const keepsakeLine = summarizeKeepsakeLine(bubbles, selectedChar.name);
@@ -1753,12 +1752,10 @@ const CallApp: React.FC = () => {
     input: string,
     skipDbId?: number,
     touchContext = '',
+    allMsgs: Message[] = [],
   ): Promise<any[]> => {
     if (!selectedChar?.id) return [{ role: 'user', content: input }];
-    const [allMsgs, emojis] = await Promise.all([
-      loadCharacterContextMessages(selectedChar),
-      DB.getEmojis().catch(() => []),
-    ]);
+    const emojis = await DB.getEmojis().catch(() => []);
     const filtered = allMsgs.filter(m => !(skipDbId && m.id === skipDbId));
     const { apiMessages } = ChatPrompts.buildMessageHistory(
       filtered, Math.max(1, filtered.length), selectedChar, userProfile || ({} as any), emojis,
@@ -1968,14 +1965,16 @@ ${sentencePlan}`;
       const baseUrl = dialogueApi.baseUrl?.replace(/\/+$/, '');
       if (!baseUrl) throw new Error('请先在设置里配置聊天 API URL');
       const userName = userProfile?.name?.trim() || '用户';
-      if (selectedChar) {
-        const callMsgs = await loadCharacterContextMessages(selectedChar);
-        await injectMemoryPalace(selectedChar, callMsgs);
-      }
+      const recollection = selectedChar ? await prepareCallRecollection({
+        char: selectedChar, user: userProfile,
+        range: await loadCharacterContextRange(selectedChar),
+        text: input, skipDbId, signal: textAbort.signal,
+      }) : null;
+      textAbort.signal.throwIfAborted();
       const touchContext = selectedChar
         ? buildPendingAvatarTouchContext(pendingTouches, selectedChar.name, userName)
         : '';
-      const messages = await buildHistoryMessages(input, skipDbId, touchContext);
+      const messages = await buildHistoryMessages(input, skipDbId, touchContext, recollection?.history);
       const thinkingPrompt = selectedChar?.showThinkingChain
         ? [
             buildThinkingChainPrompt(selectedChar.name, userName),
@@ -2004,7 +2003,7 @@ ${sentencePlan}`;
       }
       const snapshotHistory = prepareUserCameraSnapshot(messages, userCameraSnapshot);
       const characterContext = selectedChar ? (await ContextBuilder.buildCharacterContext({
-        char: selectedChar, user: userProfile, history: snapshotHistory.messages,
+        char: recollection!.char, user: userProfile, history: snapshotHistory.messages,
         timeOptions: { conversational: true, includeUserLocation: true },
         instructions: core => buildCallPrompt(userName, selectedChar.name, core, voiceLang || undefined, callMode, resolveCharTimeZone(selectedChar)),
       })) : null;
@@ -2061,7 +2060,7 @@ ${sentencePlan}`;
           }
           catch (error) { speechError = error as Error; streamingVoice.stop(); }
         },
-      } : undefined);
+      } : undefined, recollection?.onDispatch);
       let chatData: any;
       try {
         // safeFetchJson never retries billable chat completions automatically.
