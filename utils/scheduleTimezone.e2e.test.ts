@@ -73,12 +73,12 @@ describe('日程跟随角色时区（用户在中国 / 角色在纽约）', () =
         expect(injected).not.toContain('睡前刷画集');
     });
 
-    it('意识流选 morning 段，不是 evening 段', () => {
+    it('角色当地时段不再携带旧日程独白', () => {
         process.env.TZ = 'Asia/Shanghai';
         const charNow = getScheduleWallClock(nyChar, INSTANT);
 
         expect(getFlowNarrativeKey(charNow.getHours())).toBe('morning');
-        expect(ContextBuilder.buildScheduleInjection(schedule, undefined, charNow)).toContain('咖啡还没喝完');
+        expect(ContextBuilder.buildScheduleInjection(schedule, undefined, charNow)).not.toContain('咖啡还没喝完');
     });
 
     it('没开自定义时区的角色仍跟随设备时间', () => {

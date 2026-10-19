@@ -6,7 +6,7 @@ import { CharacterProfile, PhoneSimLog, CharacterBuff, UserProfile } from '../ty
 import type { SimBeat as Beat, SimBeatKind as BeatKind, SimScript } from '../types';
 import { ContextBuilder } from '../utils/context';
 import { injectMemoryPalace } from '../utils/memoryPalace/pipeline';
-import { isScheduleFeatureOn } from '../utils/scheduleGenerator';
+import { isEmotionFeatureOn } from '../utils/emotionFeature';
 import { safeResponseJson } from '../utils/safeApi';
 import { parsePersonaScriptApiResponse } from '../utils/personaSimParser';
 import { buildMemoryText, canResumePersonaSim, getPersonaSimBeatIndex, hasCompletedPersonaSim } from '../utils/personaSimLog';
@@ -221,9 +221,9 @@ const PersonaSim: React.FC<Props> = ({ targetChar, onExit, openLifeLog, sim, onS
         if (savedRef.current || !script || !logId) return;
         savedRef.current = true;
 
-        // emotion buff — only if the schedule feature is on for this character
-        const scheduleOn = isScheduleFeatureOn(targetChar);
-        const newBuff: CharacterBuff | null = (!completedRef.current && scheduleOn && script.buff?.label) ? {
+        // emotion buff — only if emotion evaluation is on for this character
+        const emotionOn = isEmotionFeatureOn(targetChar);
+        const newBuff: CharacterBuff | null = (!completedRef.current && emotionOn && script.buff?.label) ? {
             id: `buff_${Date.now()}`,
             name: script.buff.name || `sim_${Date.now()}`,
             label: script.buff.label,
@@ -514,7 +514,7 @@ const PersonaSim: React.FC<Props> = ({ targetChar, onExit, openLifeLog, sim, onS
                     {script?.ending && <div className="text-[11px] mb-4 px-3 py-1 rounded-full" style={{ color: ACCENT, background: `${ACCENT}1f` }}>{script.ending}</div>}
                     <p className="text-[13.5px] text-white/65 leading-loose max-w-[280px]" style={{ fontFamily: "'Shippori Mincho','Noto Sans SC',serif" }}>{script?.summary}</p>
 
-                    {script?.buff?.label && isScheduleFeatureOn(targetChar) && (
+                    {script?.buff?.label && isEmotionFeatureOn(targetChar) && (
                         <div className="mt-7 flex items-center gap-2 px-4 py-2 rounded-2xl border" style={{ borderColor: `${script.buff.color || ACCENT}55`, background: `${script.buff.color || ACCENT}14` }}>
                             <span className="text-base">{script.buff.emoji || '✨'}</span>
                             <div className="text-left">

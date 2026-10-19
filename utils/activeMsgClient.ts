@@ -787,9 +787,7 @@ export const buildFirePack = async (
             ...(s.description ? { description: s.description } : {}),
             ...(s.emoji ? { emoji: s.emoji } : {}),
             ...(s.location ? { location: s.location } : {}),
-            ...(s.innerThought ? { innerThought: s.innerThought } : {}),
           })),
-          ...(schedule.flowNarrative ? { flowNarrative: schedule.flowNarrative } : {}),
         },
         songPool: buildSongPool(char).map((s) => ({ id: s.id, name: s.name, artists: s.artists })),
       }

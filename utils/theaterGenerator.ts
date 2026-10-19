@@ -1,3 +1,4 @@
+import { isEmotionFeatureOn } from './emotionFeature';
 /**
  * 日程小剧场（窥视演出）生成器。
  *
@@ -8,7 +9,6 @@
  * 注入面与见面（DateApp）/ 日程对齐，复用同一批零件：
  *   - 人设全量：ContextBuilder.buildCoreContext(char, user, true)
  *   - 该时段的硬事实：activity / location / description
- *   - 当天意识流底色：flowNarrative（按时段）或 slot.innerThought
  *   - 情绪 buff：char.buffInjection
  *   - 文风：复用见面侧 DATE_STYLE_PRESETS（取 char.dateStyleConfig 的风格，缺省电影感）
  *
@@ -21,7 +21,6 @@ import { ContextBuilder } from './context';
 import { DB } from './db';
 import { safeResponseJson, extractContent } from './safeApi';
 import { isScheduleFeatureOn } from './scheduleGenerator';
-import { getFlowNarrativeKey } from './scheduleInjection';
 import { DATE_STYLE_PRESETS } from './datePrompts';
 
 interface ApiConfig {
@@ -30,14 +29,6 @@ interface ApiConfig {
     model: string;
 }
 
-/** 根据 slot 的开始时间挑当天意识流底色：优先该时段独白，再退到 flowNarrative。 */
-function pickNarrativeBackdrop(schedule: DailySchedule, slot: ScheduleSlot): string {
-    if (slot.innerThought && slot.innerThought.trim()) return slot.innerThought.trim();
-    const hour = parseInt(slot.startTime.split(':')[0], 10);
-    const key = getFlowNarrativeKey(Number.isFinite(hour) ? hour : 12);
-    const fromFlow = schedule.flowNarrative?.[key];
-    return fromFlow && fromFlow.trim() ? fromFlow.trim() : '';
-}
 
 /** 取见面侧文风预设的一句话提示，作为小剧场的文风线索（缺省电影感）。 */
 function pickStyleHint(char: CharacterProfile): string {
@@ -51,16 +42,12 @@ function buildTheaterPrompt(
     char: CharacterProfile,
     user: UserProfile,
     slot: ScheduleSlot,
-    backdrop: string,
     styleHint: string,
 ): string {
     const uname = user?.name || '对方';
     const where = slot.location ? `（地点：${slot.location}）` : '';
     const desc = slot.description ? `\n这个时段日程上的描述是：${slot.description}` : '';
-    const backdropBlock = backdrop
-        ? `\n\n这个时段，「${char.name}」心里盘旋的念头大致是这样（作为情绪底色，别照抄，要化进行为里）：\n${backdrop}`
-        : '';
-    const buffBlock = (isScheduleFeatureOn(char) && char.emotionConfig?.enabled && char.buffInjection)
+    const buffBlock = (isEmotionFeatureOn(char) && char.buffInjection)
         ? `\n\n${char.buffInjection}`
         : '';
 
@@ -97,7 +84,7 @@ function buildTheaterPrompt(
 
 现在，「${uname}」正在悄悄窥视「${char.name}」此刻的生活片段。
 
-**时间点**：${slot.startTime}，「${char.name}」正在「${slot.activity}」${where}。${desc}${backdropBlock}${buffBlock}
+**时间点**：${slot.startTime}，「${char.name}」正在「${slot.activity}」${where}。${desc}${buffBlock}
 
 请你以**第三人称·上帝视角**，演出「${char.name}」在这个时间点的一段完整生活片段 —— 像一段被偷偷拍下、有头有尾的生活纪录短片。不是几个零散镜头，而是一**段戏**：有进入、有展开、中间真的**发生一件具体的小事**、最后有个收束。
 
@@ -185,9 +172,8 @@ export async function generateSlotTheater(
 
     const characterContextInput = { char, user: userProfile, includeDetailedMemories: true };
 
-    const backdrop = pickNarrativeBackdrop(schedule, slot);
     const styleHint = pickStyleHint(char);
-    const prompt = buildTheaterPrompt('', char, userProfile, slot, backdrop, styleHint);
+    const prompt = buildTheaterPrompt('', char, userProfile, slot, styleHint);
 
     try {
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {

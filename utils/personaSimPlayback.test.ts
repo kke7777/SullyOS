@@ -11,7 +11,6 @@ vi.mock('../context/OSContext', () => ({ useOS: mocks.useOS }));
 vi.mock('./context', () => ({ ContextBuilder: {} }));
 vi.mock('./chatContextRange', () => ({ loadCharacterContextMessages: vi.fn() }));
 vi.mock('./memoryPalace/pipeline', () => ({ injectMemoryPalace: vi.fn() }));
-vi.mock('./scheduleGenerator', () => ({ isScheduleFeatureOn: () => true }));
 vi.mock('./analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('./blobRef', async importOriginal => ({
     ...await importOriginal<typeof import('./blobRef')>(), useBlobRefUrl: () => undefined,
@@ -65,7 +64,8 @@ beforeEach(async () => {
     pendingWrites = [];
     listeners.clear();
     character = {
-        id: 'playback-char', name: '甲',
+        id: 'playback-char', name: '甲', scheduleFeatureEnabled: false,
+        emotionConfig: {enabled: true, independent: true},
         phoneState: { records: [], simLogs: [{
             id: 'saved-sim', mode: 'daily', theme: '雨天', title: script.title,
             summary: script.summary, timestamp: 1, beatsCount: script.beats.length, script,
@@ -139,6 +139,15 @@ describe('小剧场断点播放', () => {
         } finally {
             window.removeEventListener('emotion-updated', emotionUpdated);
         }
+    });
+
+    it('日程开启但情绪关闭时，完成小剧场不添加 Buff', async () => {
+        character.scheduleFeatureEnabled = true;
+        character.emotionConfig = {enabled:false,independent:true};
+        await renderPlayer(ready(1));
+        await advance();
+        expect(character.activeBuffs).toBeUndefined();
+        expect(character.phoneState?.simLogs?.[0].playback?.status).toBe('completed');
     });
 
     it('生活记录显示未看完的进度，继续和从头播放使用同一条记录', async () => {

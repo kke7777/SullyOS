@@ -5,7 +5,7 @@ import { ContextBuilder } from './context';
 import { readableContextMemories } from './contextMemories';
 import { cleanApiMessages, flattenImageContentParts } from './promptMessageCleanup';
 import { normalizeUserImpression } from './impression';
-import { isScheduleFeatureOn } from './scheduleFeature';
+import { isEmotionFeatureOn } from './emotionFeature';
 
 export const countContextCharacters = (text: string) => Array.from(text).length;
 import { estimateContextTokens } from './tokenEstimate';
@@ -47,7 +47,7 @@ export function buildCharacterStats(char: CharacterProfile, user: UserProfile, r
         { title: '用户画像', content: [user.name, user.bio || '无'].join('\n') },
         { title: '印象档案', content: imp ? [imp.personality_core.summary, imp.personality_core.interaction_style, imp.personality_core.observed_traits.join(', '), imp.value_map.likes.join(', '), imp.behavior_profile.emotion_summary, imp.emotion_schema.triggers.positive.join(', '), imp.emotion_schema.triggers.negative.join(', '), imp.emotion_schema.stress_signals.join(', '), imp.emotion_schema.comfort_zone, ...(imp.observed_changes || []).map(c => typeof c === 'string' ? c : JSON.stringify(c))].filter(Boolean).join('\n') : '' },
         { title: '宫殿门牌', content: char.memoryPalaceEnabled ? char.roomPlatesInjection || '' : '' },
-        { title: '情绪底色', content: isScheduleFeatureOn(char) && char.emotionConfig?.enabled ? char.buffInjection || '' : '' },
+        { title: '情绪底色', content: isEmotionFeatureOn(char) ? char.buffInjection || '' : '' },
     ].filter(row => row.content.trim());
     const otherCharacters = otherRows.reduce((n, row) => n + countContextCharacters(row.content), 0);
     const recallSnapshot = char.memoryPalaceEnabled ? char.memoryPalaceInjection || '' : '';

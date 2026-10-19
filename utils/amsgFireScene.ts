@@ -49,10 +49,7 @@ export interface AmsgFireScene {
    * 缓存的小剧场台词和 coverImage（可能是 base64 图），随包上云纯属白占体积。
    */
   schedule: RenderableSchedule | null;
-  /**
-   * 意识流独白。日程自带的 flowNarrative 按小时分三档、到点现取，
-   * 这个字段是聊天时演化出来的那一份（进化独白），有的话优先。
-   */
+  /** 旧快照兼容字段，渲染时忽略。 */
   evolvedNarrative?: string;
   /** 歌单抽样池（charMusicSchedule.buildSongPool 的结果，最多 20 首）。 */
   songPool: AmsgFireSong[];
@@ -114,7 +111,7 @@ export const renderFireSceneBlock = (
   if (getLocalDateKey(wallNow) !== scene.dateKey) return '';
   const scheduleText = buildScheduleInjection(
     scene.schedule,
-    scene.evolvedNarrative,
+    undefined,
     wallNow,
     {
       includeClock: options?.includeClock !== false,

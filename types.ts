@@ -754,7 +754,7 @@ export interface ScheduleSlot {
     emoji?: string;       // "🏃"
     location?: string;    // "河边"
     homePosition?: { kind: 'home'; roomId: string } | { kind: 'away' };
-    innerThought?: string; // 该时段的内心独白，生成时由AI写好，运行时直接注入
+    innerThought?: string; // 旧备份兼容字段，不再生成或读取
     theater?: SlotTheater; // 该时段的小剧场（窥视演出），按需生成并缓存
 }
 
@@ -765,11 +765,7 @@ export interface DailySchedule {
     slots: ScheduleSlot[];
     generatedAt: number;
     coverImage?: string;  // 用户自定义角色看板图 (持久化)
-    /**
-     * 按时段生成的意识流独白。
-     * key = slot 的 startTime（如 "08:00"），value = 截止该时段的完整内心独白。
-     * 注入时根据当前时间找到最近的 key，直接使用整段文本，不做拼接。
-     */
+    /** 旧备份兼容字段，不再生成、显示或注入。 */
     flowNarrative?: Record<string, string>;
 }
 
@@ -3076,6 +3072,8 @@ export interface CharacterProfile {
   activeBuffs?: CharacterBuff[];
   buffInjection?: string;   // 注入到systemPrompt的叙事型情绪底色描述
   emotionConfig?: {
+    /** Migrated independent toggle; absent on legacy backups. */
+    independent?: boolean;
     enabled: boolean;
     api?: {
       baseUrl: string;
@@ -3128,9 +3126,9 @@ export interface CharacterProfile {
   scheduleStyle?: 'lifestyle' | 'mindful';
 
   /**
-   * 日程 / 情绪 Buff 总开关。
-   * - true：启用日程生成、意识流、情绪 buff 评估与注入（消耗副 API）。
-   * - false：完全关闭，不调副 API，不注入情绪，不生成日程。
+   * 日程独立开关。
+   * - true：启用日程生成与活动安排注入。
+   * - false：不生成或注入日程；不影响情绪评估。
    * - undefined：向后兼容——若 scheduleStyle 已设（老用户已隐式选风格）视为开启；否则默认关闭。
    */
   scheduleFeatureEnabled?: boolean;
