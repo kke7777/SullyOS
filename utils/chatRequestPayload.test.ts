@@ -110,15 +110,21 @@ afterEach(() => {
 });
 
 describe('timelyByWorker —— 时效段交给 worker，前端这份不重复烤', () => {
-    it('ChatApp 格式保留定稿的自然口语与弹性消息长度，置于行为规范最前', async () => {
+    it('ChatApp 使用定稿的分层线上规则，保留气泡换行与工具命令', async () => {
         const payload = await buildChatRequestPayload({ ...baseInput() });
         const systemPrompt = String(payload.fullMessages[0]?.content || '');
-        const topRule = '### TOP 1｜ChatApp 格式（本节最高优先级）\n\n你是对方的恋人/妻子，你们因为异地，只能通过手机进行线上聊天，你可以以自然口语回应对方。';
-        const bubbleRule = '回复时，**每行渲染为一个气泡，气泡之间使用实际换行**，不要输出“\\n”字样。';
-        const lengthRule = '**消息长短根据当前内容、情绪和表达习惯自然变化。可以简短，也可以是完整长句。**';
-        const onlineRule = '严格注意，哪怕上一句话你们还面对面在一起，**此刻你们也已经身处异地，只能通过手机进行线上聊天。** 请根据当前的异地情境回应，**不要输出你的行为。**';
-        expect(systemPrompt).toContain(`### 聊天 App 行为规范 (Chat App Rules)\n\n${topRule}\n\n${bubbleRule}\n\n${lengthRule}\n\n${onlineRule}\n\n### 1. 沉浸感`);
-        expect(systemPrompt).toContain('每行渲染为一个气泡；空格和标点不会拆泡');
+        expect(systemPrompt).toContain('### 聊天 App 行为规范 (Chat App Rules)\n\n### TOP 1｜ChatApp 格式（本节最高优先级）\n\n#### 1. 聊天情境');
+        expect(systemPrompt).toContain('- 彼此身处不同空间，无法直接触碰。');
+        expect(systemPrompt).toContain('- 历史中的见面、触碰和线下场景属于过去的经历，只有系统明确切换到线下模式时，才采用对应的互动方式。');
+        expect(systemPrompt).toContain('- 消息的节奏、长度和语气，随当前话题、情绪和角色的表达习惯自然变化。');
+        expect(systemPrompt).toContain('- 每行渲染为一个气泡，气泡之间使用实际换行，不要输出“\\n”字样。');
+        expect(systemPrompt).toContain('- 空格和标点不会拆泡。');
+        expect(systemPrompt).toContain('### 表情包\n\n#### 1. 发送方式');
+        expect(systemPrompt).toContain('`[[SEND_EMOJI: 表情名称]]`');
+        expect(systemPrompt).toContain('`[[QUOTE: 引用内容]]`');
+        expect(systemPrompt).toContain('### 可用动作\n\n#### 1. 回戳用户\n\n`[[ACTION:POKE]]`');
+        expect(systemPrompt).not.toContain('### 1. 沉浸感');
+        expect(systemPrompt).not.toContain('### 角色与生活');
     });
 
     it('timelyByWorker: 时钟与真实世界块不进 volatileTail，MCP 块与 tail reminder 不注入', async () => {
