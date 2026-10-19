@@ -66,7 +66,7 @@ describe('main chat input categories', () => {
         expect(blocks.reduce((sum, b) => sum + b.chars, 0)).toBe(messages.reduce((sum, m) => sum + m.content.length, 0));
     });
 
-    it('classifies the real chat payload including voice, memory placeholder and shared principles', async () => {
+    it('classifies the real chat payload including voice and memory without a shared principles block', async () => {
         localStorage.clear();
         const payload = await buildChatRequestPayload({
             char: { id: 'breakdown-main', name: '露易丝', systemPrompt: '## 外貌\n亚麻灰色头发\n### 性格\n温柔',
@@ -79,7 +79,8 @@ describe('main chat input categories', () => {
         const before = JSON.stringify(payload.fullMessages);
         const blocks = buildPromptBreakdown({ messages: payload.fullMessages })!;
         const labels = blocks.map(block => block.label);
-        for (const label of ['角色人设', '用户设定', '世界观与世界书', '记忆·长期记录', '固定聊天规则', '语音功能提示词', '共享表达原则', '聊天历史·用户消息 ×1']) expect(labels).toContain(label);
+        for (const label of ['角色人设', '用户设定', '世界观与世界书', '记忆·长期记录', '固定聊天规则', '语音功能提示词', '聊天历史·用户消息 ×1']) expect(labels).toContain(label);
+        expect(labels).not.toContain('共享表达原则');
         for (const heading of ['外貌', '性格', '喜好', '书内标题']) expect(labels).not.toContain(heading);
         expect(blocks.reduce((sum, block) => sum + block.chars, 0)).toBe(payload.fullMessages.reduce((sum, msg) => sum + String(msg.content).length, 0));
         expect(JSON.stringify(payload.fullMessages)).toBe(before);

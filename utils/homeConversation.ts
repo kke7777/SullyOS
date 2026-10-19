@@ -34,7 +34,7 @@ export function buildHomeScenePrompt(user:UserProfile,scene:HomeScene){
 }
 export async function buildHomeConversationPrompt(char:CharacterProfile,user:UserProfile,scene:HomeScene,history:Message[]=[],regenerating=false){
  const parts=await ChatPrompts.buildSystemPromptParts(char,user,[],[],[],history,undefined,regenerating?'':undefined,null,false,undefined,undefined,{appRules:''});
- return parts.stable+parts.volatileState+buildHomeScenePrompt(user,scene)+parts.recencyTail;
+ return parts.stable+parts.volatileState+buildHomeScenePrompt(user,scene);
 }
 export type HomeConversationContext = Pick<BuildChatPayloadInput,'realtimeConfig'|'musicSnapshot'> & Partial<Pick<BuildChatPayloadInput,'groups'|'emojis'|'categories'>>;
 export interface HomeReplyRequest {secretOrigin?:SecretNoteOriginPromise;context?:HomeConversationContext;char:CharacterProfile;user:UserProfile;api:APIConfig;scene:HomeScene;records:HomeRecord[];signal:AbortSignal;regenerating?:boolean;initiative?:boolean;automatic?:boolean;onStage?:(stage:string)=>void}

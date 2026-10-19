@@ -885,10 +885,6 @@ export const buildFirePack = async (
     '',
     // 到点说不说由角色自己判（见 amsgFirePack 的 BEFORE_SPEAK_LINES）。
     ...BEFORE_SPEAK_LINES,
-    '',
-    // recency 末位人声锚：上面【角色系统设定】里已带「回到你自己」钢印，但被任务说明压在后面、
-    // 失了 recency。这里在最后一句把它拎回来，让主动消息也从「你这个人」长出来，而不是滑回均值腔。
-    `（开口前回到你自己：这条得是 ${char.name} 会发的那一条——语气、用词、节奏都只属于你。哪怕只是随口一句，也要是你。）`,
   ].join('\n');
 
   return {

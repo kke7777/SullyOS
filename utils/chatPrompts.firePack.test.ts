@@ -46,7 +46,7 @@ const build = async (char: any, forFirePack: boolean) => {
         realtimeConfig, undefined, undefined, undefined, undefined, undefined,
         forFirePack ? { forFirePack: true } : undefined,
     );
-    return `${parts.stable}\n${parts.volatileState}\n${parts.recencyTail}`;
+    return `${parts.stable}\n${parts.volatileState}`;
 };
 
 beforeEach(() => {

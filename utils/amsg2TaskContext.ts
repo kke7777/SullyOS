@@ -199,10 +199,8 @@ export function buildAmsg2TaskContextText(
 /**
  * 把排程块插进本轮要发的消息数组：紧挨易变尾段**之前**，而不是贴数组尾巴。
  *
- * 「回到你自己」钢印焊在 volatileTail 末尾，靠 recency 抢模型开口前的最后一眼
- * （chatRequestPayload 的 volatileTailIndex 就是给这种块定位用的）。这一块贴在它后面
- * 的那阵子，模型最后读到的是一份带 promptHint 原文的待办清单，于是把排在今晚的任务
- * 当成本轮就该办的事——用户侧的表现是「说了今天要看书，之后每轮结尾都问看到哪了」。
+ * chatRequestPayload 的 volatileTailIndex 用于定位易变尾段。排程清单放在它前面，
+ * 让当前状态和场景指令留在清单之后，避免模型把未来任务误当成本轮要办的事。
  *
  * 插入点落在本轮用户消息之后，而前缀缓存的断点比它更靠前，所以命中率一个 token 都不动。
  * volatileTailIndex 为 -1（prompt build 跳过 / dev 的 system 合并开关）时退回贴尾：

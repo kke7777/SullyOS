@@ -103,7 +103,7 @@ it('home includes the same live task list and receipts as ChatApp, and acknowled
  const expected=await collectAmsg2TaskContext(char,user.name);
  const messages=await buildHomeConversationPayload(args);
  expect(messages.at(-2)?.content).toBe(expected.text);
- expect(messages.at(-1)?.content).toContain('回到你自己');expect(mark).not.toHaveBeenCalled();
+ expect(messages.at(-1)?.content).toContain('你正在「家园」');expect(messages.at(-1)?.content).not.toContain('回到你自己');expect(mark).not.toHaveBeenCalled();
  const fetcher=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('{"choices":[{"message":{"content":"{\\\"text\\\":\\\"好呀\\\"}"}}]}'));
  await generateHomeReply(args);expect(mark).toHaveBeenCalledWith(char.id,expected.expiredIds);
  mark.mockClear();fetcher.mockResolvedValue(new Response('',{status:503}));

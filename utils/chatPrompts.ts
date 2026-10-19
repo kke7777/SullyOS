@@ -1,5 +1,4 @@
 import {secretNoteContext} from './secretNote';
-import { buildCharacterResponsePrinciples } from './characterResponsePrinciples';
 import { expandHomeContextHistory } from './homeContextSegments';
 import { hasReliableMessageTimestamp, protectPendingChatTurn } from './storyTheaterTimeline';
 import { sarPublicContext } from './vrWorld/kanataPublicContext';
@@ -275,11 +274,11 @@ export const ChatPrompts = {
             // 本接口只返回文本，不能把深度条目移交给会被丢弃的 history 返回值。
             undefined, { ...promptOptions, history: undefined },
         );
-        return parts.stable + parts.volatileState + parts.recencyTail;
+        return parts.stable + parts.volatileState;
     },
 
     /**
-     * 构建 System Prompt —— 三段式。
+     * 构建 System Prompt —— 稳定前缀与易变状态。
      *
      * - stable：人设/世界书/印象/记忆库/行为规范/语音等「几轮甚至几天不变」的内容。
      *   作为消息数组第一条 system。前缀稳定 → 支持前缀缓存的中转能命中 prompt cache，
@@ -287,8 +286,6 @@ export const ChatPrompts = {
      * - volatileState：当前时间（分钟级）/宫殿召回/情绪 buff/实时天气/日程/音乐/群聊背景等
      *   「每轮都变」的状态。调用方放到**历史消息之后**的 system 消息里 —— 既不打断缓存前缀，
      *   又吃到 recency 注意力（时间/情绪本来就该离生成点近）。
-     * - recencyTail：「最后，回到你自己」共享原则。必须是模型开口前读到的
-     *   最后内容 —— 调用方要保证任何模式块（双语/HTML/思考链/点单等）都拼在它**前面**。
      */
     buildSystemPromptParts: async (
         char: CharacterProfile,
@@ -314,7 +311,7 @@ export const ChatPrompts = {
         // 刚才一起听途中歌被切了（char 还没重新加入）—— 注入"察觉换歌"提示。
         recentTrackSwitch?: { songName: string; artists: string } | null,
         promptOptions?: PromptBuildOptions,
-    ): Promise<{ stable: string; volatileState: string; recencyTail: string; history: import('./context').ContextMessage[] }> => {
+    ): Promise<{ stable: string; volatileState: string; history: import('./context').ContextMessage[] }> => {
         // 主动消息的模板是最后一次聊天时打好、到点才渲染的，凡是「打包这一刻」的状态
         // 到触发时都已经过期，一律不烤进模板。见 PromptBuildOptions 的清单。
         const forFirePack = promptOptions?.forFirePack === true;
@@ -1115,9 +1112,6 @@ ${voiceActingGuide()}`;
 
         }
 
-        // Shared with in-person interaction; keep this after chat-specific mode instructions.
-        const recencyTail = buildCharacterResponsePrinciples(char.name, userProfile.name);
-
         const perfTotal = Math.round(performance.now() - perfT0);
         const timingStr = Object.entries(timings)
             .sort((a, b) => b[1] - a[1])
@@ -1125,7 +1119,7 @@ ${voiceActingGuide()}`;
             .join(' ');
         console.log(`⏱ [buildSystemPrompt] total=${perfTotal}ms | stable=${baseSystemPrompt.length}ch volatile=${volatileState.length}ch | ${timingStr}`);
 
-        return { stable: baseSystemPrompt, volatileState, recencyTail, history: context.history };
+        return { stable: baseSystemPrompt, volatileState, history: context.history };
     },
 
     // 格式化消息历史
