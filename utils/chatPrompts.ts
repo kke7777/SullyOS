@@ -1253,6 +1253,7 @@ ${voiceActingGuide()}`;
                     content = `${timeStr} ${formatTransferRecord({
                         role: m.role as 'user' | 'assistant',
                         amount: tMeta.amount,
+                        note: tMeta.note,
                         receipt: tMeta.receipt,
                         status: tMeta.status,
                     })}`;

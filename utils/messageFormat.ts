@@ -136,6 +136,7 @@ export function normalizeMessageContent(
         return formatTransferRecord({
             role: msg.role === 'user' ? 'user' : 'assistant',
             amount: meta.amount,
+            note: meta.note,
             receipt: meta.receipt,
             status: meta.status,
         });

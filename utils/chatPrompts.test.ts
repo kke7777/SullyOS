@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { ChatPrompts } from './chatPrompts';
 import { buildGroupHistoryBlock } from './groupChat/prompts';
+import { normalizeMessageContent } from './messageFormat';
+import { extractTransferCommands } from './transferFormat';
 import type { CharacterProfile, Message } from '../types';
 
 // 钉住「图片值不许当正文进 prompt」这条线。
@@ -19,6 +21,28 @@ const BLOB_TOKEN = 'blobref:b_abcdef0123456789';
 const DATA_URL = 'data:image/jpeg;base64,' + 'A'.repeat(600);
 
 const t0 = Date.now() - 60_000;
+
+describe('转账备注：私聊历史与归档/记忆输入一致', () => {
+    it('双方转账的备注都进入模型原文，状态变化后仍完整保留', () => {
+        for (const role of ['user', 'assistant'] as const) {
+            for (const status of ['pending', 'accepted', 'returned']) {
+                const message: Message = {
+                    id: 1, charId: 'c1', role, type: 'transfer', content: '[转账]', timestamp: t0,
+                    metadata: { amount: '20', note: '给露露点奶茶', status },
+                };
+                const { apiMessages } = ChatPrompts.buildMessageHistory([message], 10, char, userProfile, []);
+                const history = String(apiMessages[0].content);
+                const memory = normalizeMessageContent(message, char.name, userProfile.name);
+                expect(memory).toContain('|note="给露露点奶茶"');
+                expect(history).toContain(memory);
+                expect(memory).toContain(`|to=${role === 'user' ? 'char' : 'user'}|amount=20|`);
+                expect(memory).toContain(`|status=${status === 'accepted' ? '已收下' : status === 'returned' ? '已退回' : '待处理'}|`);
+                expect(extractTransferCommands(memory).events).toEqual([]);
+                expect(message.metadata?.note).toBe('给露露点奶茶');
+            }
+        }
+    });
+});
 
 /** 用户引用了一条图片消息，然后回了一句话。 */
 const replyToMediaMessage = (mediaValue: string): Message[] => ([
