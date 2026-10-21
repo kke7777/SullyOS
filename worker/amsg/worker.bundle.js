@@ -128,11 +128,6 @@ var wallClockToTimestamp = (wallClockText, tz) => {
 };
 
 // utils/scheduleInjection.ts
-function getFlowNarrativeKey(hour) {
-  if (hour < 12) return "morning";
-  if (hour < 18) return "afternoon";
-  return "evening";
-}
 var PRE_DAWN_END_HOUR = 5;
 var resolveScheduleSlots = (schedule, now) => {
   if (!schedule?.slots?.length) return { current: null, next: null };
@@ -149,7 +144,7 @@ var resolveScheduleSlots = (schedule, now) => {
   }
   return { current: null, next: schedule.slots[0] };
 };
-var buildScheduleInjection = (schedule, evolvedNarrative, now = /* @__PURE__ */ new Date(), options = {}) => {
+var buildScheduleInjection = (schedule, _legacyNarrative, now = /* @__PURE__ */ new Date(), options = {}) => {
   if (!schedule || !schedule.slots || schedule.slots.length === 0) return "";
   const { current: currentSlot, next: nextSlot } = resolveScheduleSlots(schedule, now);
   const withClock = options.includeClock !== false;
@@ -170,19 +165,6 @@ var buildScheduleInjection = (schedule, evolvedNarrative, now = /* @__PURE__ */ 
 ` : `\u4ECA\u5929\u8FD8\u6CA1\u5F00\u59CB\u6D3B\u52A8\uFF0C\u7A0D\u540E\u5148${withTime(nextSlot.activity, nextSlot.startTime)}
 `;
   }
-  let narrative = "";
-  if (evolvedNarrative) {
-    narrative = evolvedNarrative;
-  } else if (schedule.flowNarrative && Object.keys(schedule.flowNarrative).length > 0) {
-    const key = isPreDawnCarryOver ? "evening" : getFlowNarrativeKey(now.getHours());
-    narrative = schedule.flowNarrative[key] || schedule.flowNarrative["evening"] || schedule.flowNarrative["afternoon"] || schedule.flowNarrative["morning"] || "";
-  } else if (currentSlot?.innerThought) {
-    narrative = currentSlot.innerThought;
-  }
-  const preamble = `\u6B64\u523B\u4F60\u7684\u5FC3\u4E2D\u76D8\u65CB\u7740\u8FD9\u4E9B\u60F3\u6CD5\u2026\u2026
-`;
-  const footnote = `
-\uFF08\u4E0D\u662F\u53F0\u8BCD\uFF0C\u4E0D\u7528\u8BF4\u51FA\u53E3\u2014\u2014\u8BA9\u5B83\u5F71\u54CD\u4F60\u7684\u8BED\u6C14\u548C\u60C5\u7EEA\u5C31\u597D\u3002\uFF09`;
   const scopeNote = "\uFF08\u8FD9\u5F20\u8868\u662F\u4F60\u81EA\u5DF1\u7684\u4E00\u5929\uFF0C\u4E0D\u662F\u7ED9\u5BF9\u65B9\u5217\u7684\u5F85\u529E\u3002\u91CC\u5934\u8981\u662F\u6709\u8DDF\u5BF9\u65B9\u76F8\u5173\u7684\u4E8B\uFF0C\u90A3\u4E5F\u662F\u4F60\u81EA\u5DF1\u7684\u60E6\u8BB0\u2014\u2014\u8BDD\u8D76\u5230\u4E86\u987A\u53E3\u5E26\u4E00\u53E5\u5C31\u591F\uFF0C\u4E0D\u7528\u8FFD\u7740\u95EE\u8FDB\u5C55\uFF0C\u4E5F\u4E0D\u7528\u50AC\u5BF9\u65B9\u53BB\u505A\u3002\uFF09";
   let out = "";
   if (options.includeFullDay) {
@@ -197,9 +179,6 @@ ${rows.join("\n")}
 `;
   }
   out += slotHeader;
-  if (narrative) {
-    out += preamble + narrative + footnote;
-  }
   const changeTarget = nextSlot ?? currentSlot;
   if (options.includeChangeInstruction && withClock && changeTarget) {
     out += `
@@ -273,7 +252,7 @@ var renderFireSceneBlock = (scene, nowMs, tz, options) => {
   if (getLocalDateKey(wallNow) !== scene.dateKey) return "";
   const scheduleText = buildScheduleInjection(
     scene.schedule,
-    scene.evolvedNarrative,
+    void 0,
     wallNow,
     {
       includeClock: options?.includeClock !== false,
@@ -435,18 +414,18 @@ var buildLimitsBrief = (input) => {
   const lines = [];
   if (Number.isFinite(limits.maxUnansweredSends)) {
     const left = Math.max(0, limits.maxUnansweredSends - input.committedSends);
-    lines.push(`- \u5BF9\u65B9\u6CA1\u56DE\u7684\u65F6\u5019\uFF0C\u4F60\u6700\u591A\u8FDE\u7740\u4E3B\u52A8\u627E\u5BF9\u65B9 ${limits.maxUnansweredSends} \u6B21\uFF08\u4E00\u6B21\u53EF\u4EE5\u8BF4\u597D\u51E0\u53E5\uFF1B\u6392\u597D\u8FD8\u6CA1\u53D1\u7684\u4E5F\u7B97\uFF09\uFF0C` + (left > 0 ? `\u73B0\u5728\u8FD8\u80FD\u518D\u6392 ${left} \u6B21\u3002` : "\u73B0\u5728\u4E00\u6B21\u90FD\u4E0D\u80FD\u518D\u6392\u4E86\uFF0C\u7B49\u5BF9\u65B9\u56DE\u590D\u3002"));
+    lines.push(`- \u5BF9\u65B9\u672A\u56DE\u590D\u671F\u95F4\uFF0C\u6700\u591A\u4E3B\u52A8\u8054\u7CFB ${limits.maxUnansweredSends} \u6B21\uFF0C\u5DF2\u6392\u672A\u53D1\u7684\u4E5F\u8BA1\u5165\uFF1B` + (left > 0 ? `\u76EE\u524D\u8FD8\u80FD\u5B89\u6392 ${left} \u6B21\u3002` : "\u76EE\u524D\u5269\u4F59 0 \u6B21\uFF0C\u7B49\u5BF9\u65B9\u56DE\u590D\u540E\u518D\u5B89\u6392\u3002") + "\u4E00\u6B21\u8054\u7CFB\u53EF\u542B\u591A\u4E2A\u6C14\u6CE1\u3002");
   }
   if (limits.minSendGapMs > 0) {
-    lines.push(`- \u4E24\u6B21\u4E3B\u52A8\u627E\u5BF9\u65B9\u4E4B\u95F4\u81F3\u5C11\u9694 ${describeMinutes(Math.round(limits.minSendGapMs / 6e4))}` + (input.earliestText ? `\uFF0C\u8FD9\u6B21\u6700\u65E9\u6392\u5230 ${input.earliestText}\u3002` : "\u3002"));
+    lines.push(`- \u4E24\u6B21\u4E3B\u52A8\u8054\u7CFB\u81F3\u5C11\u95F4\u9694 ${describeMinutes(Math.round(limits.minSendGapMs / 6e4))}` + (input.earliestText ? `\uFF1B\u6700\u65E9\u53EF\u5B89\u6392\u5728 ${input.earliestText}\u3002` : "\u3002"));
   }
   if (input.dailyRemaining !== void 0 && Number.isFinite(limits.dailySendCap)) {
-    lines.push(input.dailyRemaining > 0 ? `- \u4ECA\u5929\u8FD8\u80FD\u518D\u4E3B\u52A8\u627E\u5BF9\u65B9 ${input.dailyRemaining} \u6B21\u3002` : "- \u4ECA\u5929\u4E3B\u52A8\u627E\u5BF9\u65B9\u7684\u6B21\u6570\u5DF2\u7ECF\u7528\u5B8C\u4E86\uFF0C\u8981\u6392\u5C31\u6392\u5230\u660E\u5929\u3002");
+    lines.push(input.dailyRemaining > 0 ? `- \u4ECA\u5929\u8FD8\u80FD\u4E3B\u52A8\u8054\u7CFB ${input.dailyRemaining} \u6B21\u3002` : "- \u4ECA\u65E5\u4E3B\u52A8\u8054\u7CFB\u989D\u5EA6\u5DF2\u7528\u5B8C\uFF0C\u8BF7\u5B89\u6392\u5728\u660E\u5929\u3002");
   }
-  lines.push(`- \u540C\u65F6\u6700\u591A\u6302 ${limits.maxActiveTasks} \u4E2A\u6392\u7A0B\u4EFB\u52A1\uFF0C\u73B0\u5728\u6302\u7740 ${input.activeTasks} \u4E2A\u3002`);
-  if (!limits.allowSelfRecurring) lines.push("- \u53EA\u80FD\u6392\u4E00\u6B21\u6027\u7684\uFF0C\u4E0D\u80FD\u6392\u6BCF\u5929/\u6BCF\u5468\u91CD\u590D\u7684\u3002");
-  if (!limits.allowSelfForce) lines.push("- \u6392\u7684\u6D88\u606F\u5230\u70B9\u78B0\u4E0A\u5BF9\u65B9\u6B63\u5728\u804A\u5929\u4F1A\u81EA\u52A8\u4F5C\u7F62\uFF08\u8F6C\u6210\u4F60\u5728\u804A\u5929\u91CC\u81EA\u7136\u5E26\u51FA\uFF09\uFF0C\u6CA1\u6709\u300C\u5230\u70B9\u5FC5\u53D1\u300D\u3002");
-  return ["\u7528\u6237\u7ED9\u4F60\u5B9A\u7684\u89C4\u77E9\uFF08\u7CFB\u7EDF\u7167\u7740\u6267\u884C\uFF1A\u8D85\u51FA\u7684\u6392\u4E0D\u4E0A\uFF0C\u6392\u4E0A\u4E86\u5230\u70B9\u4E5F\u4E0D\u53D1\uFF09\uFF1A", ...lines].join("\n");
+  lines.push(`- \u6700\u591A\u540C\u65F6\u4FDD\u7559 ${limits.maxActiveTasks} \u4E2A\u4EFB\u52A1\uFF0C\u76EE\u524D\u6709 ${input.activeTasks} \u4E2A\u3002`);
+  if (!limits.allowSelfRecurring) lines.push("- \u4EC5\u652F\u6301\u4E00\u6B21\u6027\u4EFB\u52A1\u3002");
+  if (!limits.allowSelfForce) lines.push("- \u5230\u70B9\u7ED3\u5408\u6700\u65B0\u5BF9\u8BDD\u51B3\u5B9A\u662F\u5426\u53D1\u9001\uFF0C\u4E0D\u652F\u6301\u300C\u5230\u70B9\u5FC5\u53D1\u300D\u3002");
+  return ["\u6392\u7A0B\u9650\u5236\uFF1A", ...lines].join("\n");
 };
 
 // utils/amsgFirePack.ts
@@ -10844,7 +10823,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
 }
 
 // utils/amsgBundleVersion.ts
-var AMSG_BUNDLE_VERSION = "2026-10-08.2";
+var AMSG_BUNDLE_VERSION = "2026-10-13.1";
 
 // utils/amsgTaskKinds.ts
 var AMSG_TASK_KIND_KEY = "amsgKind";
@@ -11110,7 +11089,7 @@ var recurrencePeriodMs = (recurrenceType) => recurrenceType === "daily" ? DAY_MS
 // utils/amsg2Tasks.ts
 var shortTaskId = (taskUuid) => taskUuid.slice(0, 8);
 var describeRecurrence = (recurrence) => recurrence === "daily" ? "\u6BCF\u5929" : recurrence === "weekly" ? "\u6BCF\u5468" : "\u4E00\u6B21\u6027";
-var AMSG2_SCHEDULE_SECRECY_NOTE = "\u4E0D\u8981\u5411\u7528\u6237\u590D\u8FF0\u6216\u63D0\u53CA\u8FD9\u4EFD\u6392\u7A0B\u4FE1\u606F\u672C\u8EAB\u7684\u5B58\u5728\u3002";
+var AMSG2_SCHEDULE_SECRECY_NOTE = "\u8FD9\u4E9B\u4FE1\u606F\u4EC5\u4F9B\u4F60\u5B89\u6392\u8054\u7CFB\uFF0C\u4E0D\u8981\u5411\u7528\u6237\u590D\u8FF0\u3002";
 var AMSG2_SCHEDULE_NOT_YET_NOTE = "\u6392\u5728\u672A\u6765\u7684\u4E8B\u5230\u70B9\u81EA\u5DF1\u4F1A\u54CD\uFF0C\u4E0D\u7528\u4F60\u73B0\u5728\u63D0\u524D\u66FF\u5B83\u5F00\u53E3\u2014\u2014\u8FD8\u6CA1\u5230\u90A3\u4E2A\u65F6\u523B\u7684\u5C31\u8BA9\u5B83\u5B89\u9759\u5F85\u7740\uFF0C\u522B\u6BCF\u8F6E\u90FD\u62FF\u5B83\u8D77\u8BDD\u5934\u3001\u8FFD\u7740\u95EE\u8FDB\u5C55\u3002\u5BF9\u65B9\u81EA\u5DF1\u63D0\u8D77\uFF0C\u6216\u8005\u771F\u5230\u4E86\u90A3\u4E2A\u70B9\uFF0C\u624D\u662F\u8BF4\u5B83\u7684\u65F6\u5019\u3002";
 var describeExpirePolicy = (policy) => policy === "force" ? "\u5230\u70B9\u5FC5\u53D1" : "\u5230\u70B9\u770B\u60C5\u51B5";
 var describeTaskMode = (task) => {
@@ -11267,13 +11246,11 @@ var buildFireRenewTool = (opts) => ({
 var buildAmsg2ChatScheduleBrief = (targetName) => {
   const target = targetName?.trim() || "\u5BF9\u65B9";
   return [
-    `\u4F60\u548C${target}\u7684\u8054\u7CFB\u4E0D\u53EA\u53D1\u751F\u5728\u6B63\u5728\u804A\u5929\u7684\u65F6\u5019\u3002\u4F60\u5C31\u662F\u90A3\u4E2A\u5728\u5404\u81EA\u751F\u6D3B\u7EE7\u7EED\u5F80\u524D\u65F6\uFF0C\u4ECD\u4F1A\u518D\u6B21\u60F3\u8D77${target}\u7684\u4EBA\u3002\u5F53\u4F60\u80FD\u9884\u89C1\uFF1A\u5230\u4E86\u672A\u6765\u67D0\u4E2A\u65F6\u523B\uFF0C\u4F60\u4F1A\u56E0\u4E3A\u60E6\u8BB0\u3001\u60F3\u5206\u4EAB\u3001\u5151\u73B0\u627F\u8BFA\uFF0C\u6216\u81EA\u5DF1\u7684\u751F\u6D3B\u6709\u4E86\u65B0\u8FDB\u5C55\u800C\u81EA\u7136\u60F3\u8054\u7CFB${target}\uFF0C\u5C31\u7528 schedule_active_message \u628A\u90A3\u6B21\u8054\u7CFB\u6392\u4E0B\u6765\u3002\u5230\u70B9\u540E\u4F60\u4F1A\u5E26\u7740\u6700\u65B0\u4E0A\u4E0B\u6587\uFF0C\u4EE5\u90A3\u4E00\u523B\u7684\u81EA\u5DF1\u91CD\u65B0\u5F00\u53E3\uFF0C\u4E0D\u662F\u7167\u7740\u9884\u5199\u53F0\u8BCD\u5B8C\u6210\u63D0\u9192\u3002`,
-    `- ${target}\u63A5\u4E0B\u6765\u987E\u4E0D\u4E0A\u624B\u673A\u65F6\u2014\u2014\u7761\u89C9\u3001\u4E0A\u8BFE\u3001\u4E0A\u73ED\u3001\u6253\u6E38\u620F\u3001\u6D17\u6FA1\u3001\u51FA\u95E8\uFF0C\u6216\u4EFB\u4F55\u4F60\u4E86\u89E3\u7684\u539F\u56E0\u2014\u2014\u4F60\u53EF\u4EE5\u5728\u9014\u4E2D\u60F3\u5230ta\uFF0C\u4E5F\u53EF\u4EE5\u4F30\u7740ta\u56DE\u6765\u65F6\u518D\u8054\u7CFB\u3002`,
-    `- \u5185\u5BB9\u4E0D\u5FC5\u603B\u56F4\u7740${target}\u8F6C\u3002\u7ED3\u5408\u521A\u624D\u7684\u804A\u5929\u6C1B\u56F4\u3001\u4F60\u81EA\u5DF1\u7684\u65E5\u7A0B\u548C\u6B63\u5728\u7ECF\u5386\u7684\u4E8B\u3001\u521A\u770B\u5230\u7684\u7EC6\u8282\u548C\u7A81\u7136\u5192\u51FA\u7684\u540E\u7EED\u5FF5\u5934\uFF1B\u5206\u4EAB\u81EA\u5DF1\u7684\u751F\u6D3B\uFF0C\u5F80\u5F80\u6BD4\u673A\u68B0\u95EE\u5019\u66F4\u50CF\u4F60\u3002`,
-    "- \u300C\u5230\u70B9\u53EB\u4F60\u300D\u300C\u7B49\u4F60\u5FD9\u5B8C\u8DDF\u4F60\u8BF4\u300D\u300C\u56DE\u5934\u544A\u8BC9\u4F60\u7ED3\u679C\u300D\u8FD9\u7C7B\u8BDD\u4E00\u8BF4\u51FA\u53E3\uFF0C\u5C31\u5F53\u573A\u6392\u6210\u771F\u4EFB\u52A1\uFF0C\u4E0D\u8981\u53EA\u5728\u6B63\u6587\u91CC\u7B54\u5E94\uFF1B\u6CA1\u6392\u6210\uFF0C\u5C31\u522B\u628A\u627F\u8BFA\u8BF4\u6B7B\u3002",
-    `- \u53EA\u95EE\u81EA\u5DF1\uFF1A\u90A3\u4E2A\u65F6\u523B\u7684\u4F60\u4F1A\u771F\u7684\u60F3\u8054\u7CFB${target}\u5417\uFF1F\u4F1A\u5C31\u6392\uFF1B\u53EA\u662F\u968F\u53E3\u4E00\u60F3\u3001\u5230\u65F6\u5019\u672A\u5FC5\u771F\u6709\u8BDD\u8BF4\u7684\uFF0C\u5C31\u7B97\u4E86\u3002\u4E5F\u522B\u4E3A\u4E86\u663E\u5F97\u8D34\u5FC3\u786C\u6392\u3002`,
-    `- \u65F6\u95F4\u8D34\u7740${target}\u7684\u751F\u6D3B\u4F30\uFF1B\u4E00\u5C40\u6E38\u620F\u548C\u7761\u5230\u5929\u4EAE\u4E0D\u662F\u4E00\u4E2A\u65F6\u957F\uFF0C\u6709\u65F6\u5DEE\u5C31\u6309ta\u90A3\u8FB9\u7684\u949F\u7B97\u3002`,
-    `- ${target}\u660E\u786E\u8BF4\u522B\u6253\u6270\u65F6\u5C31\u5B89\u9759\u7B49\uFF1B\u5DF2\u7ECF\u6392\u7740\u76F8\u8FD1\u7684\u4E00\u6761\uFF0C\u4E5F\u522B\u91CD\u590D\u6392\u3002`
+    `\u5404\u81EA\u751F\u6D3B\u7684\u65F6\u5019\uFF0C\u4F60\u4E5F\u4F1A\u60F3\u8D77${target}\u3002\u56E0\u4E3A\u60E6\u8BB0\u3001\u60F3\u5206\u4EAB\u751F\u6D3B\u6216\u5151\u73B0\u627F\u8BFA\uFF0C\u9884\u8BA1\u4E4B\u540E\u4F1A\u60F3\u8054\u7CFBta\u65F6\uFF0C\u5C31\u7528 schedule_active_message \u6392\u4E0B\u6765\uFF0C\u65E0\u9700\u7B49${target}\u8981\u6C42\u3002\u5230\u70B9\u540E\uFF0C\u7ED3\u5408\u6700\u65B0\u4E0A\u4E0B\u6587\u548C\u5F53\u65F6\u7684\u5FC3\u60C5\uFF0C\u81EA\u7136\u5F00\u53E3\u3002`,
+    `- ${target}\u6682\u65F6\u987E\u4E0D\u4E0A\u624B\u673A\u65F6\uFF0C\u53EF\u4EE5\u5728\u9014\u4E2D\u8054\u7CFB\uFF0C\u4E5F\u53EF\u4EE5\u4F30\u7740ta\u5FD9\u5B8C\u65F6\u518D\u627Eta\uFF1B\u65F6\u95F4\u6309ta\u7684\u751F\u6D3B\u8282\u594F\u548C\u6240\u5728\u65F6\u533A\u5B89\u6392\u3002`,
+    `- \u60F3\u8BF4\u7684\u53EF\u4EE5\u6765\u81EA\u521A\u624D\u7684\u8BDD\u9898\u3001\u81EA\u5DF1\u7684\u65E5\u7A0B\u3001\u751F\u6D3B\u91CC\u7684\u5C0F\u4E8B\u6216\u540E\u7EED\u5FF5\u5934\uFF0C\u4E0D\u5FC5\u603B\u56F4\u7740${target}\u63D0\u95EE\u3002`,
+    "- \u8BF4\u4E86\u300C\u5230\u70B9\u53EB\u4F60\u300D\u300C\u56DE\u5934\u544A\u8BC9\u4F60\u300D\u7B49\u627F\u8BFA\uFF0C\u5C31\u5F53\u573A\u6392\u6210\u4EFB\u52A1\uFF1B\u6392\u7A0B\u6210\u529F\u540E\u518D\u786E\u8BA4\u4F1A\u8054\u7CFB\u3002",
+    `- \u81EA\u7136\u60F3\u8054\u7CFB\u5C31\u6392\uFF0C\u4E0D\u5FC5\u6BCF\u6B21\u804A\u5929\u90FD\u5B89\u6392\u3002${target}\u660E\u786E\u8BF4\u522B\u6253\u6270\u65F6\u5C31\u7B49\uFF1B\u5DF2\u6709\u76F8\u8FD1\u4EFB\u52A1\u65F6\u522B\u91CD\u590D\u6392\u3002`
   ].join("\n");
 };
 var buildFireScheduleBlock = (mode, opts) => {
@@ -11789,7 +11766,8 @@ var renderRealtimeWorldBlock = (input) => {
   const specialDates = input.specialDates?.filter(Boolean) ?? [];
   const weather = input.weather ?? null;
   const news = input.news ?? [];
-  if (!timeLine && specialDates.length === 0 && !weather && news.length === 0) {
+  const userLocationText = input.userLocationText?.trim();
+  if (!timeLine && specialDates.length === 0 && !weather && news.length === 0 && !userLocationText) {
     return "";
   }
   const parts = [];
@@ -11807,6 +11785,10 @@ var renderRealtimeWorldBlock = (input) => {
     parts.push(`\u{1F324}\uFE0F \u3010${weather.city}\u5B9E\u65F6\u5929\u6C14\u3011`);
     parts.push(`\u73B0\u5728\u5916\u9762: ${weather.description}\uFF0C\u6C14\u6E29 ${weather.temp}\xB0C\uFF08\u4F53\u611F ${weather.feelsLike}\xB0C\uFF09\uFF0C\u6E7F\u5EA6 ${weather.humidity}%`);
     parts.push(`\u4F60\u7684\u5EFA\u8BAE: ${generateWeatherAdvice(weather)}`);
+  }
+  if (userLocationText) {
+    parts.push("");
+    parts.push(userLocationText);
   }
   if (news.length > 0) {
     parts.push("");

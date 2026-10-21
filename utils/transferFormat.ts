@@ -46,6 +46,8 @@ export interface TransferRecordInput {
     /** 消息的 role —— 方向的唯一真理来源 (约束 2) */
     role: 'user' | 'assistant';
     amount?: string | number;
+    /** 转账备注 (metadata.note)，作为记录内容传给聊天和记忆。 */
+    note?: string;
     /** 回执消息 (metadata.receipt) */
     receipt?: 'accepted' | 'returned';
     /** 原始转账的 live 状态 (metadata.status) —— 收/退后历史不再显示"待处理" */
@@ -72,7 +74,12 @@ export function formatTransferRecord(input: TransferRecordInput): string {
     const amountPart = (amount !== undefined && amount !== null && String(amount).trim() !== '')
         ? `|amount=${amount}`
         : '';
-    return `[[记录:TRANSFER|to=${to}${amountPart}|status=${status}]]`;
+    const note = typeof input.note === 'string' ? input.note.trim() : '';
+    // JSON 保留引号、换行等原文；转义记录分隔符，避免备注截断记录或形成动作标签。
+    const notePart = note
+        ? `|note=${JSON.stringify(note).replace(/[|\[\]]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)}`
+        : '';
+    return `[[记录:TRANSFER|to=${to}${amountPart}|status=${status}${notePart}]]`;
 }
 
 /** 一条转账相关指令。方向不在这里 —— 见约束 2。 */

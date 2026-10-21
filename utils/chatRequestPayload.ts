@@ -19,6 +19,9 @@ import type { CharacterProfile, UserProfile, GroupProfile, Emoji, EmojiCategory,
 import { ChatPrompts, detectChatModeTransition } from './chatPrompts';
 import { ContextBuilder } from './context';
 import { injectMemoryPalace } from './memoryPalace/pipeline';
+import type { RecallMaterial } from './memoryPalace/recallMaterial';
+import { prepareRecollection } from './memoryPalace/recollection';
+import type { RecollectionSnapshot } from './memoryPalace/recollectionSnapshot';
 import { renderLocalContextGuidance } from './memoryPalace/recallRouter';
 import { renderInteractionAdaptationGuidance } from './memoryPalace/interactionAdaptation';
 import { renderDeepEngagementGuidance } from './memoryPalace/deepEngagement';
@@ -129,6 +132,8 @@ export type ChatPreparationStage='vision'|'memory'|'prompt'|'collaboration'|'tas
 export type ChatPreparationEvent={stage:ChatPreparationStage;status:'start'}|{stage:ChatPreparationStage;status:'end';ms:number};
 
 export interface BuildChatPayloadResult {
+    /** Prepared only; the sending transport saves it when the main request is dispatched. */
+    recollection?: RecollectionSnapshot;
     /** Shared task receipts actually included for a home reply; acknowledge only after success. */
     amsg2ExpiredNoticeIds?: string[];
     /** 完整 system prompt（含所有可选块） */
@@ -138,11 +143,8 @@ export interface BuildChatPayloadResult {
     /** [system, ...cleanedApiMessages, 末尾 bilingual reminder?] —— 主 API 直接发这个 */
     fullMessages: Array<{ role: string; content: any }>;
     /**
-     * fullMessages 里易变尾段那条 system 的下标；想插在钢印**之前**的块按它定位。
-     *
-     * 「回到你自己」焊在 volatileTail 末尾，靠 recency 抢模型开口前的最后一眼。后来
-     * 贴数组尾巴的块（amsg2 排程清单）会把那一眼抢走——一份带具体内容的待办清单
-     * 摆在最后，模型会当成本轮该办的事。插在这个下标前，钢印就还是最后一句。
+     * fullMessages 里易变尾段那条 system 的下标；排程清单等背景块插在它之前，
+     * 让当前状态和场景指令保留在背景清单之后。
      * -1 = 没有可插的尾段（prompt build 被跳过，或 dev 的 system 合并开关把多条并成了一条）。
      */
     volatileTailIndex: number;
@@ -222,12 +224,12 @@ export function deriveRecentTrackSwitchForChar(
  * 构造完整 chat 请求载荷。三段式结构（稳定前缀 / 历史 / 易变尾段）：
  *
  *   1. injectMemoryPalace（向量召回挂到 char.memoryPalaceInjection）
- *   2. ChatPrompts.buildSystemPromptParts → { stable, volatileState, recencyTail }
+ *   2. ChatPrompts.buildSystemPromptParts → { stable, volatileState }
  *   3. stable += 双语指令 / HTML 模式 / 思考链（按角色配置，变化慢）
  *   4. ChatPrompts.buildMessageHistory → apiMessages → 剥离旧双语标签 → cleanedApiMessages
  *   5. volatileTail = volatileState + 麦当劳/瑞幸/瑞一杯实时快照块
  *   6. stable += 通用 MCP 工具块（工具清单持久化，变化慢）
- *   7. volatileTail += recencyTail（总纲+「回到你自己」钢印，永远最后）
+ *   7. volatileTail += 当前 App 场景指令（如有）
  *   8. fullMessages = [stable system, ...cleanedApiMessages, volatileTail system]
  *   9. fullMessages.push（末尾双语 reminder / MCP reminder）
  *
@@ -322,13 +324,31 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
 
     input.signal?.throwIfAborted();
     // ── 1. Memory Palace 向量召回 ─────────────────────────
-    const recallTrace = await prepare('memory',()=>injectMemoryPalace(
-        char,
-        recentMsgsHint,
-        input.recallQueryHint,
-        userProfile?.name,
-        { entryPoint: input.recallEntryPoint ?? 'chat_payload' },
-    ));
+    const { recallTrace, recollection } = await prepare('memory', async () => {
+        let recallMaterial: RecallMaterial | undefined;
+        const recallTrace = await injectMemoryPalace(
+            char, recentMsgsHint, input.recallQueryHint, userProfile?.name,
+            { entryPoint: input.recallEntryPoint ?? 'chat_payload', onMaterial: material => { recallMaterial = material; } },
+        );
+        // Background evaluations reuse this request's final prompt, without another writing call.
+        const conversationRecall = isChatConversationEntry(input.recallEntryPoint)
+            || input.recallEntryPoint === 'proactive_chat';
+        const recollection = char.memoryPalaceEnabled && conversationRecall
+            ? await prepareRecollection({
+                char, user: userProfile,
+                messages: protectPendingChatTurn(expandHomeContextHistory(
+                    historyMsgsForPrompt.filter(message => message.id > contextHighWaterMark),
+                )),
+                material: recallMaterial, originalText: char.memoryPalaceInjection || '',
+                signal: input.signal,
+            })
+            : undefined;
+        if (recollection) {
+            char.memoryPalaceInjection = recollection.text;
+            if (recallTrace.injection) recallTrace.injection.memoryChars = recollection.text.length;
+        }
+        return { recallTrace, recollection };
+    });
 
     input.signal?.throwIfAborted();
     // ── 2. 解析音乐共听（如果 caller 没显式给，就从 snapshot 推） ──
@@ -346,11 +366,9 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
     // 换歌察觉：char 换歌那刻在一起听、还没重新加入 → 下一轮回复里注入"歌切了"的提示
     const recentTrackSwitch = deriveRecentTrackSwitchForChar(recentTrackChange, char.id, !!isListeningTogether);
 
-    // ── 3. buildSystemPromptParts 核心（三段式） ──────────
+    // ── 3. buildSystemPromptParts 核心 ──────────
     // stable → 消息数组第一条 system（前缀稳定，吃 prompt cache）；
     // volatileTail → 历史消息之后的 system（时间/召回/buff/日程/音乐等实时状态 + 点单类模式块）；
-    // recencyTail（总纲+「回到你自己」钢印）最后拼进 volatileTail 末尾，保证它是模型
-    // 开口前读到的最后内容 —— 双语/HTML/思考链等格式块都只能拼在 stable 里、排它前面。
     // UI 为了不把通话/见面/剧情正文画进 ChatApp，会把这些 source 从 React state 过滤掉；
     // 但主 API 的 historyMsgsForPrompt 来自完整 DB，仍然会看到它们。模式切换必须以 API
     // 真正要发送的历史为准，否则模型会收到特殊模式正文，却收不到「切回聊天格式」的提示。
@@ -487,7 +505,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         }
     }
 
-    // ── 10. recency 钢印归位 + 组装 fullMessages ─────────
+    // ── 10. 追加当前语境与场景 + 组装 fullMessages ─────────
     // 私聊与 3D 家园共用本地语境分析：它告诉主模型“这句话此刻在做什么”，
     // 不指定具体记忆答案、不改变角色人格，也不进入其他 App 的专属写作提示。
     if (isChatConversationEntry(input.recallEntryPoint)) {
@@ -511,10 +529,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         }
     }
 
-    // 「最后，回到你自己」共享原则放在模式说明之后：修复旧版把双语/HTML/
-    // 思考链/点单块拼在钢印之后、模型开口前最后读到的是格式说明书的问题。
     if (input.appPrompt) volatileTail += input.appPrompt.scene;
-    volatileTail += parts.recencyTail;
     if (sarModuleBlock) volatileTail += sarModuleBlock;
 
     // 结构：[稳定 system] + [历史消息] + [易变状态 system] (+ 末尾 reminder)。
@@ -596,6 +611,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
         // 合并开关开着时多条 system 被并进开头一条，下标失去意义 → 交出 -1，调用方退回贴尾。
         volatileTailIndex: finalMessages === fullMessages ? volatileTailIndex : -1,
         amsg2ExpiredNoticeIds,
+        recollection,
         recallTrace,
         flags: { bilingualActive, mcdActive, luckinActive, luckinChatActive, mcpChatActive, htmlActive, thinkingActive, sarModuleActive: !!sarModuleBlock, promptBuildSkipped: false },
     };

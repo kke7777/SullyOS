@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, DownloadSimple, MagnifyingGlassPlus, MagnifyingGlassMinus } from '@phosphor-icons/react';
+import { X, MagnifyingGlassPlus, MagnifyingGlassMinus } from '@phosphor-icons/react';
+import SaveImageButton from '../os/SaveImageButton';
 import TokenImg from '../os/TokenImg';
 import { useBlobRefUrl } from '../../utils/blobRef';
 import './ChatImage.css';
@@ -25,7 +26,7 @@ export function ImageViewer({ value, fallback, name, onClose }: { value: string;
         }}>
         <header><button ref={close} onClick={onClose} aria-label="关闭图片预览" title="关闭"><X size={24} /></button><div>
             <button onClick={() => setZoom(v => !v)} aria-label={zoom ? '缩小图片' : '放大图片'} title={zoom ? '缩小' : '放大'}>{zoom ? <MagnifyingGlassMinus size={24} /> : <MagnifyingGlassPlus size={24} />}</button>
-            {src && <a href={src} download={name || 'photo'} aria-label="保存图片" title="保存图片"><DownloadSimple size={24} /></a>}
+            {src && <SaveImageButton value={failed ? fallback : value} />}
         </div></header>
         <div className={`chat-image-stage ${zoom ? 'is-zoomed' : ''}`} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
             {src ? <img src={src} alt="聊天图片预览" onError={() => setFailed(true)} /> : <span role="status">正在读取图片…</span>}

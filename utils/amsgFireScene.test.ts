@@ -152,7 +152,7 @@ describe('renderFireSceneBlock — 到点现挑时段', () => {
             .toEqual(resolveFireSceneSong(scene, shanghaiAt(22, 10), tz));
     });
 
-    it('意识流独白按触发时刻的时段取（不是打包时刻那一档）', () => {
+    it('旧云端快照中的独白不再注入', () => {
         const withFlow: AmsgFireScene = {
             ...scene,
             schedule: {
@@ -160,8 +160,8 @@ describe('renderFireSceneBlock — 到点现挑时段', () => {
                 flowNarrative: { morning: '早上的念头', afternoon: '下午的念头', evening: '晚上的念头' },
             },
         };
-        expect(renderFireSceneBlock(withFlow, shanghaiAt(9), { tzId: 'Asia/Shanghai' })).toContain('早上的念头');
-        expect(renderFireSceneBlock(withFlow, shanghaiAt(21), { tzId: 'Asia/Shanghai' })).toContain('晚上的念头');
+        expect(renderFireSceneBlock(withFlow, shanghaiAt(9), { tzId: 'Asia/Shanghai' })).not.toContain('早上的念头');
+        expect(renderFireSceneBlock(withFlow, shanghaiAt(21), { tzId: 'Asia/Shanghai' })).not.toContain('晚上的念头');
     });
 });
 

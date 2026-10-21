@@ -1,0 +1,52 @@
+# 聊天生图
+
+基于 `android/nuomi-apk-20261013` 的 35489711（2026-10-16 异地聊天提示词定稿）接入，不包含缓存草稿分支。
+
+## 使用
+
+- 设置 → 生图 API，或私聊功能面板 → 聊天生图：选择「OpenAI 兼容」或「OpenRouter」接口类型，填写独立 URL、Key、模型，选择尺寸与质量。旧配置未指定接口类型时仍按 OpenAI 兼容处理。
+- OpenRouter：选择后自动填入 `https://openrouter.ai/api/v1` 和 `openai/gpt-image-2.5-sunburst`。填写自己的 OpenRouter Key，点击「拉取模型」，搜索并点选型号，完整 ID 会自动填入模型框，点击「保存设置」后生效。切换接口类型清空 Key、重置地址与模型，保留人物参考图、尺寸、质量，避免将旧渠道 Key 发给新渠道。
+- 模型拉取使用生图专用凭据，Android 走原生网络。OpenAI 兼容类型使用 GET `/v1/models`；OpenRouter 使用 GET `/api/v1/images/models`，返回专用生图模型列表。地址支持域名、版本基础地址及完整生图端点。更换类型、地址或 Key 会清空旧列表并忽略旧请求。列表不按名称硬过滤；渠道未提供列表时仍可手填，不会因拉取列表而自动更换原模型。
+- 为人物添加 JPG / PNG / WebP 原图（每张 ≤20MB，最多 16 张），填写人物名和参考用途。图存本机 blob_assets，配置保存 blobref，随完整系统备份恢复；不要手动删除仍被配置引用的 Blob。
+- 会话功能面板里打开「当前聊天启用生图」，保存后用自然语言提出画面要求。开关按角色保存，接口和参考库全局共用。
+- 质量新增「超高（xhigh）」，按用户所选值发送，渠道不支持时明确返回错误，不自动降低质量或重试。默认画风为日系二次元动漫风格；人物五官、发型等辨识特征依照参考图，其他要求沿用已确认的四节版指南。
+- 点开聊天图片或内部相册大图，点击「保存到手机相册」。Android 使用 MediaStore 将原始文件保存至 `Pictures/糯米机`，不压缩重绘，成功写入后才提示成功；现代 Android 不申请读取相册权限，Android 9 及以下按需请求写入权限。网页仍使用原下载出口。内部相册与手机系统相册分别保存。
+- 开关关闭时，不读取或额外发送参考图、生图说明、工具。已生成图片作为普通历史图片，沿用原聊天的识图/上下文范围规则。
+- 主聊天 API 必须支持图片输入和原生 function calling。独立识图 API 仍处理普通聊天图片，不会把专用于生图的参考图降成文字。
+- 第一版只在前台私聊执行：生图开启的回合显式否决云端即时聊天，界面提示保持前台；普通聊天、主动消息的 Worker 行为不变，不上传生图 Key 和参考库。
+
+## 协议
+
+`utils/imageGeneration.ts` 按保存的 `apiType` 选择协议，原有 OpenAI Images 请求保持兼容。
+
+- 基础地址可填域名、带 `/v1` 的地址，或完整标准 generations/edits URL；统一拼接目标路径。
+- 无参考图：`POST /v1/images/generations`，JSON。
+- 带参考图：`POST /v1/images/edits`，multipart，`image[]` 原文件；先按 reference_ids 验证并取原图，再在 prompt 里附上有序的人物名称与备注，避免身份错配。未知/失效图不会发请求。
+- model 原样保留 `[0.15]` 前缀；使用 size、quality、n=1、stream=false。
+- OpenRouter（`apiType: 'openrouter'`）：无图与带图均 POST `/api/v1/images`，JSON。带图时将所选原图按顺序编码为 data URL，放入 `input_references: [{type:'image_url', image_url:{url:...}}]`，并沿用有序人物名称与备注。使用完整模型 ID，不加中转站的 `[0.15]` 前缀。返回图片、费用、保存与停止处理复用原路径。
+- OpenRouter 的模型能力因型号而异，拉取到的型号不代表都支持当前尺寸、质量或参考图数量；不支持时如实报错，不静默删图、降质量或换模型。2026-10-16 的 Sunburst/Flare 实时端点信息均列有 `xhigh`，比通用文档中的档位更完整。
+- 浏览器使用 fetch；Android 使用 CapacitorHttp（序列化 formData/base64File），绕过 WebView CORS，不改变全局网络配置。浏览器直连需要渠道允许该站点的 CORS。
+- 响应支持 `data[0].b64_json` 与 `data[0].url`，落库前下载成 Blob，聊天与相册共享同一引用。接口提供 `usage.cost` 时记录并显示美元费用；不推算不存在的价格。
+- 每次回复最多提交一次生图，不自动重试付费请求，不删除参考图重试，不切模型。失败作为工具结果交给聊天模型简短说明。
+- 请求和发布都检查停止信号。Android 原生 HTTP 桥本身不支持中途取消上游，停止可阻止迟到图片入库/上屏；上游可能仍完成并计费，不自动补发。
+
+默认生图指南由 `IMAGE_GENERATION_GUIDE` 定义，只作用于显式开启的私聊主请求，不改普通聊天固定规则、共享表达原则、语音、记忆或后台打包。
+
+OpenRouter 协议参考（2026-10-16）：
+- https://openrouter.ai/docs/guides/overview/multimodal/image-generation
+- https://openrouter.ai/api/v1/images/models
+- https://openrouter.ai/api/v1/images/models/openai/gpt-image-2.5-sunburst/endpoints
+
+## 验证
+
+`pnpm vitest run utils/imageGeneration.test.ts utils/imageModelList.test.ts utils/imageGenerationChat.test.ts utils/imageGenerationSettings.test.ts utils/saveImage.test.ts utils/saveImageButton.test.ts utils/chatRequestPayload.test.ts utils/characterCard.test.ts`
+
+外部渠道兼容性仍需用户在手机填入有效 Key 后验证。开发测试使用模拟响应，不使用真实 Key、不产生付费生图。
+
+OpenRouter 适配验证：上述 90 项测试及生产构建通过。覆盖浏览器/Android 原生的无图与带图 JSON 请求、原图顺序和人物对应、专用生图模型列表、搜索点选与保存后恢复、切换类型忽略旧请求、旧配置兼容、单次付费请求限制，以及聊天工具循环和内部相册入库。未用真实 Key 执行付费生图，真机联网效果仍需安装新版后确认。
+
+模型拉取修复验证：48 项相关测试通过（含生图工具循环、模型列表协议、选择器交互、原生网络、推送和系统栏回归）。覆盖点选后完整型号填入与保存、失败保留原值、更换凭据后旧请求失效。
+
+手机相册保存、xhigh 与新版指南验证：64 项前端/协议测试及 18 项 Android 原生模拟测试通过。原生保存覆盖 Android 9/14 的原字节复制、待写入记录发布、失败回滚及缓存路径校验，并保留推送与系统栏回归。实际渠道的 xhigh 支持及真机相册展示需填 Key、安装后确认。
+
+开发验证：107 项针对性与相关回归测试通过，完整构建通过。全量 TypeScript 检查仍报告其他文件的类型问题；本次修改文件无类型诊断。浏览器截图验收受当前环境本地服务不可达限制，组件交互由 jsdom 验证。

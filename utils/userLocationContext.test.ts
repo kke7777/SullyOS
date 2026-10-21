@@ -48,7 +48,7 @@ it('scheduled fire-pack templates say unknown without capturing device data, eve
     expect(JSON.stringify(foreground.fullMessages)).toContain('在家附近');
     vi.mocked(getCurrentPositionSmart).mockClear();
     const parts = await ChatPrompts.buildSystemPromptParts(char, user, [], [], [], [], undefined, undefined, undefined, false, undefined, undefined, { forFirePack: true, includeUserLocation: true });
-    const template = parts.stable + parts.volatileState + parts.recencyTail;
+    const template = parts.stable + parts.volatileState;
     expect(template).toContain('小雨现在的定位未知，作为辅助参考背景信息，具体以小雨的说明为准');
     for (const secret of ['家附近', '31.2304', '121.4737', '不推断', '不要追问']) expect(template).not.toContain(secret);
     expect(getCurrentPositionSmart).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ it('scheduled fire-pack templates say unknown without capturing device data, eve
 it('scheduled templates omit location when it is disabled or settings cannot be read', async () => {
     const build = async () => {
         const parts = await ChatPrompts.buildSystemPromptParts(char, user, [], [], [], [], undefined, undefined, undefined, false, undefined, undefined, { forFirePack: true });
-        return parts.stable + parts.volatileState + parts.recencyTail;
+        return parts.stable + parts.volatileState;
     };
     saveUserLocationConfig({ ...config, enabled: false });
     expect(await build()).not.toContain('小雨当前的位置');

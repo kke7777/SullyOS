@@ -1,3 +1,4 @@
+import { isEmotionFeatureOn } from '../../utils/emotionFeature';
 import { ContextBuilder, type CharacterContextInput } from '../../utils/context';
 /**
  * Memory Dive Engine (记忆潜行引擎)
@@ -1004,7 +1005,7 @@ function sanitizeDiveBuffs(raw: any): CharacterBuff[] {
  */
 export async function emitDiveEmotion(params: EmitDiveEmotionParams): Promise<void> {
   try {
-    if (!params.charProfile.emotionConfig?.enabled) return;
+    if (!isEmotionFeatureOn(params.charProfile)) return;
     if (!params.api?.baseUrl) return;
 
     const prompt = buildDiveEmotionPrompt(params);

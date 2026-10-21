@@ -1065,6 +1065,7 @@ describe('buildFirePack 的时区参照系与模板（①）', () => {
     expect(section).toContain('默认是照常说');
     expect(section).toContain('正聊着不等于不说');
     expect(section).toContain(`只写 ${AMSG_SILENT_MARK} 这一个标记`);
+    expect(template).not.toContain('回到你自己');
   });
 
   // 回归守卫：timeAwarenessEnabled=false 的架空角色在前台连今天几号都读不到

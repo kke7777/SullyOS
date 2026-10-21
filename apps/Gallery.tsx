@@ -6,6 +6,7 @@ import { GalleryImage, CharacterProfile } from '../types';
 import { safeResponseJson } from '../utils/safeApi';
 import ConfirmDialog from '../components/os/ConfirmDialog';
 import TokenImg from '../components/os/TokenImg';
+import SaveImageButton from '../components/os/SaveImageButton';
 import { trackEvent } from '../utils/analytics';
 import { Star } from '@phosphor-icons/react';
 import {
@@ -369,6 +370,7 @@ CRITICAL: Stay in character. If there's conversation context, your comment shoul
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
                 </button>
                 <div className="flex items-center gap-2 pointer-events-auto">
+                    <SaveImageButton value={selectedImage.url} className="bg-black/40 backdrop-blur-md border border-white/10" />
                     <button onClick={() => void handleToggleImageFavorite()} className={`text-white backdrop-blur-md p-2 rounded-full active:scale-95 transition-transform border border-white/10 ${imageFavorited ? 'bg-amber-500/80' : 'bg-black/40 hover:bg-black/60'}`} aria-label={imageFavorited ? '取消收藏图片' : '收藏图片'}>
                         <Star size={20} weight={imageFavorited ? 'fill' : 'regular'} />
                     </button>

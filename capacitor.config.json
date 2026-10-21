@@ -1,5 +1,5 @@
 {
-  "appId": "com.aetheros.simulator",
+  "appId": "com.kke7777.nuomi",
   "appName": "SullyOS·糯米机",
   "webDir": "dist",
   "server": {
@@ -13,7 +13,19 @@
     "Keyboard": {
       "resize": "body",
       "style": "dark",
-      "resizeOnFullScreen": true
+      "resizeOnFullScreen": false
     }
+  },
+  "android": {
+    "includePlugins": [
+      "@capacitor-community/speech-recognition",
+      "@capacitor/app",
+      "@capacitor/filesystem",
+      "@capacitor/geolocation",
+      "@capacitor/keyboard",
+      "@capacitor/local-notifications",
+      "@capacitor/share",
+      "@capacitor/status-bar"
+    ]
   }
 }

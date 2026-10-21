@@ -11,3 +11,8 @@ it('regeneration evaluates afresh without the previous buffs',async()=>{
  await evaluateHomeReplyEmotion({...args,regenerating:true,char:{...args.char,buffInjection:'old',activeBuffs:[{name:'old'}]}},[{role:'system',content:'clean context'}]);
  expect(m.evaluate.mock.calls[0][0]).toMatchObject({buffInjection:'',activeBuffs:[]});
 });
+
+it('independent emotion evaluates with schedule off', async () => {
+ await evaluateHomeReplyEmotion({...args,char:{...args.char,scheduleFeatureEnabled:false,emotionConfig:{...args.char.emotionConfig,independent:true}}},[]);
+ expect(m.evaluate).toHaveBeenCalledOnce();
+});

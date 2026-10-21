@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DatePrompts, DATE_STYLE_PRESETS, extractObservation, stripObservation, hasObservation, resolveObserveFields, OBSERVE_OPEN, OBSERVE_CLOSE } from './datePrompts';
 import type { CharacterProfile, UserProfile, Message, MountedWorldbook } from '../types';
-import { buildCharacterResponsePrinciples } from './characterResponsePrinciples';
 import { buildChatRequestPayload } from './chatRequestPayload';
 import { setElevenLabsModel, setTtsProvider, setVoicePromptOverrides } from './ttsProvider';
 
@@ -113,11 +112,16 @@ describe('DatePrompts.buildSessionPayload', () => {
         const off = await DatePrompts.buildSessionPayload(baseInput(makeChar({ dateStyleConfig: { digDeeper: false } })));
         expect(sysOf(off.messages)).not.toContain('深挖，别填充');
         expect(lastUserOf(off.messages).content).not.toContain('本轮线索');
-        // ContextBuilder 的全 App 通用精简版（表达底线）不受 digDeeper 开关影响，常驻
-        expect(sysOf(off.messages)).toContain('表达底线');
+        // 公共 Anti-Filler 已移除；见面的细节深挖开关仍独立生效。
+        for (const result of [on, off]) {
+            const system = result.messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+            expect(system).not.toContain('表达底线');
+            expect(system).not.toContain('珍贵的素材');
+            expect(system).not.toContain('### 最后，回到你自己');
+        }
     });
 
-    it('本轮 user 带 System Note，末尾 system 收束角色原则；reroll 的 note 不同', async () => {
+    it('本轮 user 带 System Note，末尾 system 保留见面规则；reroll 的 note 不同', async () => {
         const send = await DatePrompts.buildSessionPayload(baseInput(makeChar()));
         expect(send.messages[0].role).toBe('system');
         const lastSend = lastUserOf(send.messages);
@@ -146,11 +150,10 @@ describe('DatePrompts.buildSessionPayload', () => {
     });
 });
 
-describe('跨场景角色原则', () => {
-    it('ChatApp 与见面发送、重生成、开场共用完整的表达原则，且只注入一次', async () => {
+describe('跨场景提示词', () => {
+    it('ChatApp 与见面发送、重生成、开场均不再注入共享表达原则', async () => {
         const char = makeChar();
         const allMsgs = [makeMsg({ content: '今天不想出门，就坐会儿吧。' })];
-        const shared = buildCharacterResponsePrinciples(char.name, user.name);
         const chat = await buildChatRequestPayload({
             char, userProfile: user, groups: [], emojis: [], categories: [],
             historyMsgs: allMsgs, contextLimit: 20,
@@ -164,8 +167,8 @@ describe('跨场景角色原则', () => {
         const peek = (await DatePrompts.buildPeekPayload({ char, userProfile: user, allMsgs, emojis: [] }));
         for (const messages of [chat.fullMessages, send.messages, reroll.messages, peek.messages]) {
             const text = messages.map(m => m.content).join('\n');
-            expect(text.split(shared)).toHaveLength(2);
-            expect(messages.slice(-1)[0].content).toContain(shared);
+            expect(text).not.toContain('### 最后，回到你自己');
+            expect(text).toContain(char.systemPrompt);
         }
         expect(lastUserOf(send.messages).content).toContain(allMsgs[0].content);
         expect(lastUserOf(reroll.messages).content).toContain('不必加强情绪或推进关系');

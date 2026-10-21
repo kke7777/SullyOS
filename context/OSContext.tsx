@@ -67,11 +67,12 @@ import {
   loadCharacterContextRange,
   migrateCharacterContextRange,
 } from '../utils/chatContextRange';
-import { isScheduleFeatureOn } from '../utils/scheduleGenerator';
+import { isEmotionFeatureOn } from '../utils/emotionFeature';
 import { evaluateEmotionBackground } from '../hooks/useChatAI';
 import {HOME_SECRETS_UPDATED} from '../utils/homeSecrets';
 import { CHAT_GEN_EVENTS, setChatViewSnapshot, isEmbeddedChatVisible } from '../utils/chatGenEvents';
 import { buildChatRequestPayload } from '../utils/chatRequestPayload';
+import { createRecollectionDispatch } from '../utils/memoryPalace/recollectionSnapshot';
 import { ChatPrompts } from '../utils/chatPrompts';
 import { extractHtmlBlocks } from '../utils/htmlPrompt';
 import { mergePalaceFragmentsIntoMemories } from '../utils/memoryPalace/pipeline';
@@ -1760,7 +1761,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         finalChars = finalChars.map(c => {
           const normalized = normalizeCharacterDefaults(normalizeCharacterImpression(c));
           const migration = migrateCharacterContextRange(normalized);
-          if (migration.migrated) migratedContextCount++;
+          if (migration.migrated || normalized.emotionConfig !== c.emotionConfig) migratedContextCount++;
           if (migration.resetAutoContext) resetAutoContextCount++;
           return migration.character;
         });
@@ -2448,8 +2449,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
               // 3c. 情绪评估 fire-and-forget — 与主 API 并行，沿用 useChatAI 的 API 选择逻辑：
               //     角色专属情绪 API > 主 apiConfig（与记忆宫殿副 API 完全独立）
-              if (!payload.flags.promptBuildSkipped && !isEmotionEvalSkipped() && isScheduleFeatureOn(char) && char.emotionConfig?.enabled) {
-                  const emotionApi = (char.emotionConfig.api?.baseUrl)
+              if (!payload.flags.promptBuildSkipped && !isEmotionEvalSkipped() && isEmotionFeatureOn(char)) {
+                  const emotionApi = (char.emotionConfig?.api?.baseUrl)
                       ? char.emotionConfig.api
                       : { baseUrl: apiConfigRef.current.baseUrl, apiKey: apiConfigRef.current.apiKey, model: apiConfigRef.current.model };
                   if (emotionApi.baseUrl && currentUserProfile) {
@@ -2483,7 +2484,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               const data = await safeFetchJson(`${baseUrl}/chat/completions`, {
                   method: 'POST', headers,
                   body: JSON.stringify(reqBody)
-              }, 2, 0, { appName: '消息', charId, charName: char.name, purpose: '主动消息' });
+              }, 2, 0, { appName: '消息', charId, charName: char.name, purpose: '主动消息' }, undefined, createRecollectionDispatch(payload.recollection));
 
               // 5. Process & save response
               let aiContent = data.choices?.[0]?.message?.content || '';
@@ -3268,9 +3269,9 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const syncEmotionApiToAllCharacters = (api: { baseUrl: string; apiKey: string; model: string } | undefined) => {
     setCharacters(prev => {
       const updated = prev.map(c => {
-        const prevEmotion = c.emotionConfig;
         const nextEmotion = {
-          enabled: !!prevEmotion?.enabled,
+          enabled: isEmotionFeatureOn(c),
+          independent: true,
           ...(api && api.baseUrl ? { api: { baseUrl: api.baseUrl, apiKey: api.apiKey, model: api.model } } : {}),
         };
         const next = normalizeCharacterImpression({ ...c, emotionConfig: nextEmotion });
@@ -3296,11 +3297,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const savePresets = (presets: ApiPreset[]) => { const normalized = presets.map(normalizeApiPreset); setApiPresets(normalized); localStorage.setItem('os_api_presets', JSON.stringify(normalized)); };
   const addCharacter = async () => {
     const name = 'New Character';
-    // 默认开启 emotionConfig.enabled，让"开日程 = 开情绪"这条隐含约定对新角色也成立。
-    // 真正的闸门是 (isScheduleFeatureOn && emotionConfig.enabled)，schedule 没开
-    // 时副 API 不会触发，所以这里默认 true 安全。
-    // 注意：memoryPalaceEnabled 不在这里默认开 —— 那是用户在记忆宫殿 App 显式 opt-in
-    // 的功能，自动开会替用户决策。
+    // 新角色的日程与情绪分别由用户开启。
     const newChar: CharacterProfile = {
       id: `char-${Date.now()}`,
       name,
@@ -3311,7 +3308,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       contextLimit: DEFAULT_MANUAL_CONTEXT_LIMIT,
       contextRangeMode: 'manual',
       contextRangePolicyVersion: CONTEXT_RANGE_POLICY_VERSION,
-      emotionConfig: { enabled: true },
+      emotionConfig: { enabled: false, independent: true },
     };
     setCharacters(prev => [...prev, newChar]);
     setActiveCharacterId(newChar.id);
@@ -3321,7 +3318,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const updateCharacter = async (id: string, updates: Partial<CharacterProfile> | ((prev: CharacterProfile) => Partial<CharacterProfile>)) => {
     if (typeof updates !== 'function' && Object.keys(updates).some(key => ['chatAppearance','chatFineTune','bubbleStyle','chatBackground','chromeCustomCss','chatSound','chatSoundBound','chatDecorationCssIsolated'].includes(key))) stopBeautyUsage('chat:' + id);
     setCharacters(prev => {
-      const updated = prev.map(c => c.id === id ? normalizeCharacterImpression({ ...c, ...(typeof updates === 'function' ? updates(c) : updates) }) : c);
+      const updated = prev.map(c => {
+        if (c.id !== id) return c;
+        const normalized = normalizeCharacterDefaults(c);
+        return normalizeCharacterImpression({ ...normalized, ...(typeof updates === 'function' ? updates(normalized) : updates) });
+      });
       const target = updated.find(c => c.id === id);
       if (target) {
         const before = prev.find(c => c.id === id);
@@ -5358,7 +5359,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               const normalizedChars = chars.map(c => {
                   const normalized = normalizeCharacterDefaults(normalizeCharacterImpression(c));
                   const migration = migrateCharacterContextRange(normalized);
-                  if (migration.migrated) importedContextMigrated = true;
+                  if (migration.migrated || normalized.emotionConfig !== c.emotionConfig) importedContextMigrated = true;
                   if (migration.resetAutoContext) importedAutoContextCount++;
                   return migration.character;
               });

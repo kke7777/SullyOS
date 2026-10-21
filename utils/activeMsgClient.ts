@@ -787,9 +787,7 @@ export const buildFirePack = async (
             ...(s.description ? { description: s.description } : {}),
             ...(s.emoji ? { emoji: s.emoji } : {}),
             ...(s.location ? { location: s.location } : {}),
-            ...(s.innerThought ? { innerThought: s.innerThought } : {}),
           })),
-          ...(schedule.flowNarrative ? { flowNarrative: schedule.flowNarrative } : {}),
         },
         songPool: buildSongPool(char).map((s) => ({ id: s.id, name: s.name, artists: s.artists })),
       }
@@ -887,10 +885,6 @@ export const buildFirePack = async (
     '',
     // 到点说不说由角色自己判（见 amsgFirePack 的 BEFORE_SPEAK_LINES）。
     ...BEFORE_SPEAK_LINES,
-    '',
-    // recency 末位人声锚：上面【角色系统设定】里已带「回到你自己」钢印，但被任务说明压在后面、
-    // 失了 recency。这里在最后一句把它拎回来，让主动消息也从「你这个人」长出来，而不是滑回均值腔。
-    `（开口前回到你自己：这条得是 ${char.name} 会发的那一条——语气、用词、节奏都只属于你。哪怕只是随口一句，也要是你。）`,
   ].join('\n');
 
   return {
@@ -1642,6 +1636,7 @@ const fetchWithAuthRaw = async (
   config: ActiveMsg2GlobalConfig,
   init: RequestInit,
   phase = '接口',
+  onDispatch?: () => void,
 ): Promise<{ status: number; body: any }> => {
   const headers = new Headers(init.headers);
   if (config.serverToken) headers.set('X-Client-Token', config.serverToken);
@@ -1651,6 +1646,8 @@ const fetchWithAuthRaw = async (
   if (gzipped) headers.set('Content-Encoding', 'gzip');
 
   try {
+    init.signal?.throwIfAborted();
+    onDispatch?.();
     const response = await fetch(`${normalizeWorkerBase(config.workerUrl)}/${path}`, {
       ...init,
       headers,
@@ -2817,6 +2814,7 @@ export const ActiveMsgClient = {
   async sendInstantChat(params: {
     uuid?: string;
     signal?: AbortSignal;
+    onDispatch?: () => void;
     char: CharacterProfile;
     /** 本地生成会 POST 给 /chat/completions 的那串 fullMessages，原样带上去。 */
     chatMessages: Array<{ role: string; content: unknown }>;
@@ -3021,7 +3019,7 @@ export const ActiveMsgClient = {
         // 外壳是明文：里头两个信封已经加密好，别再给外壳挂加密头（包装层会当它是整体密文）。
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statePayload, taskPayload: encryptedTask, ...(credPayload ? { credPayload } : {}) }),
-      }, '即时对话');
+      }, '即时对话', params.onDispatch);
     };
 
     let { status, body } = await postInstantChat();

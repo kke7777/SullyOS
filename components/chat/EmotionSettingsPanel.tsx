@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CharacterProfile, ApiPreset, APIConfig, CharacterBuff } from '../../types';
-import { isScheduleFeatureOn } from '../../utils/scheduleGenerator';
+import { isEmotionFeatureOn } from '../../utils/emotionFeature';
 
 interface EmotionSettingsPanelProps {
     char: CharacterProfile;
@@ -9,6 +9,7 @@ interface EmotionSettingsPanelProps {
     addApiPreset: (name: string, config: APIConfig) => void;
     onSave: (config: NonNullable<CharacterProfile['emotionConfig']>) => void;
     onClearBuffs: () => void;
+    onToggle?: () => void;
 }
 
 const normalizeIntensity = (n: number | undefined | null): 1 | 2 | 3 => {
@@ -24,7 +25,7 @@ const INTENSITY_DOTS = (n: number | undefined | null) => {
 };
 
 const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
-    char, apiPresets, addApiPreset, onSave, onClearBuffs
+    char, apiPresets, addApiPreset, onSave, onClearBuffs, onToggle
 }) => {
     const [url, setUrl] = useState('');
     const [key, setKey] = useState('');
@@ -60,22 +61,21 @@ const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
 
     const handleSave = () => {
         const api = url ? { baseUrl: url, apiKey: key, model } : undefined;
-        // 与日程强制同步：日程/情绪总开关开启时情绪必跑。
-        // 注意 scheduleFeatureEnabled=true 时即使还没选 scheduleStyle，也应保持情绪开启。
-        onSave({ enabled: isScheduleFeatureOn(char), api });
+        onSave({ enabled: isEmotionFeatureOn(char), independent: true, api });
         setDirty(false);
     };
 
-    const buffs: CharacterBuff[] = char.activeBuffs || [];
-    const scheduleOn = isScheduleFeatureOn(char);
+    const buffs: CharacterBuff[] = isEmotionFeatureOn(char) ? char.activeBuffs || [] : [];
+    const emotionOn = isEmotionFeatureOn(char);
 
     return (
         <div className="space-y-4 pt-4 border-t border-slate-100">
             <div>
-                <div className="text-xs font-bold text-slate-700 mb-1">🎭 情绪 / 意识流 API</div>
+                <div className="text-xs font-bold text-slate-700 mb-1">🎭 情绪评估与 Buff</div>
+                <button type="button" role="switch" aria-checked={emotionOn} aria-label="切换情绪评估" onClick={onToggle} className="px-3 py-2 rounded-xl bg-slate-100 text-xs">{emotionOn ? "已开启" : "已关闭"}</button>
                 <div className="text-[11px] text-slate-500 leading-relaxed space-y-1">
                     <p>
-                        原版情绪 buff 就在这里。与日程<b>强制同步</b>：日程开 → 自动启用；日程关 → 一起停。
+                        独立控制情绪评估与 Buff 注入，聊天和 3D 家园共用此设置。
                     </p>
                     <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
                         ⚙️ 下方不填 = 自动用主 API。想细腻点就填个 <b>Claude 系列</b>模型。
@@ -83,9 +83,9 @@ const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
                 </div>
             </div>
 
-            {!scheduleOn && (
+            {!emotionOn && (
                 <div className="text-[11px] text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded-lg px-3 py-2">
-                    尚未选择日程风格。选择「生活系」或「意识系」后，情绪/意识流会自动启用。
+                    情绪评估已关闭：不调用评估 API，不注入情绪状态。API 配置仍会保留。
                 </div>
             )}
 
@@ -209,7 +209,7 @@ const EmotionSettingsPanel: React.FC<EmotionSettingsPanelProps> = ({
                         ))}
                     </div>
                 </div>
-            ) : scheduleOn ? (
+            ) : emotionOn ? (
                 <div className="text-xs text-slate-400 text-center py-2">
                     暂无情绪状态 — 发几条消息后会自动生成
                 </div>

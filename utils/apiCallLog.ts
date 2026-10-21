@@ -17,6 +17,8 @@
  * 吞掉，绝不影响主请求链路。
  */
 
+import { RECOLLECTION_REFERENCE_PREFIX, readRecollectionReference } from './memoryPalace/recollectionReference';
+
 /** 调用方可补充的语义信息（哪个 App / 角色 / 用途）。能填多少填多少。 */
 export interface ApiCallMeta {
     /** AppID 字符串，如 'chat' / 'lifesim'，可空 */
@@ -99,9 +101,9 @@ export interface ApiCallLogEntry extends ApiCallMeta {
     promptBreakdown?: PromptBlockStat[];
 }
 
-/** 输入构成里的一块：system prompt 的一个 ### 段落，或聚合后的聊天历史。 */
+/** 输入构成里的一类资料；非主聊天及旧记录也可能是标题段落。 */
 export interface PromptBlockStat {
-    /** 块名：### 标题 / [System: …] 行 / 无标题时取首行摘要；历史消息聚合成「聊天历史·×N」 */
+    /** 资料类别或原始块名；历史消息按双方角色分别聚合。 */
     label: string;
     /** 该块字符数（含标题行与换行） */
     chars: number;
@@ -413,30 +415,86 @@ function findBlockHeaders(lines: string[]): Map<number, string> {
  * 一个块头都没有的短消息（双语 / MCP 尾部提醒等）整条算一块，取首行当名字。
  */
 function splitSystemBlocks(text: string): PromptBlockStat[] {
-    const out: PromptBlockStat[] = [];
-    let label = '（开头·未分块部分）';
-    let chars = 0;
-    let sawHeader = false;
+    // Count actual spans, including only newlines that exist in the request.
+    return splitCaptureTextBlocks(text).filter(block => block.end > block.start)
+        .map(block => ({ label: block.label, chars: block.end - block.start }));
+}
+
+/** Only program-owned boundaries start a category; user-authored subheadings stay with their source. */
+const CHAT_SOURCE_HEADERS: Record<string, string> = {
+    '[System: Roleplay Configuration]': '角色人设',
+    '### 你的身份 (Character)': '角色人设',
+    '### 互动对象 (User)': '用户设定',
+    '### 世界观与设定 (World Settings)': '世界观与世界书',
+    '### 扩展设定集 (Worldbooks)': '世界观与世界书',
+    '### 内在认知 (Self Insights)': '角色认知与印象',
+    '### 底色认知 (Resident Knowledge)': '记忆·常驻认知',
+    '### 记忆系统 (Memory Bank)': '记忆·长期记录',
+    '### 记忆宫殿 (Memory Palace)': '记忆·本次召回',
+    '### 聊天 App 行为规范 (Chat App Rules)': '固定聊天规则',
+    '### 最后，回到你自己': '共享表达原则',
+    '### 🎤 语音消息功能': '语音功能提示词',
+    '### 当前时间 (Now)': '时间、日程与实时状态',
+    '### 当前内心想法': '情绪与内心状态',
+    '### [当前情绪底色]': '情绪与内心状态',
+    '### 【真实世界感知系统】': '时间、日程与实时状态',
+    '### 【如何使用这些信息】': '时间、日程与实时状态',
+    '### 【今日特殊】': '时间、日程与实时状态',
+    '你今天的完整日程：': '时间、日程与实时状态',
+    '### 【群聊背景 · 你亲历的近期群聊】': '群聊背景',
+    '### 你们的家园（共同空间）': '家园与宠物设定',
+    '### 家园里的宠物': '家园与宠物设定',
+    '### 【此刻的对话氛围】': '音乐互动',
+    '### 【你此刻的背景音】': '音乐互动',
+    '### 【你的歌单】': '音乐互动',
+    '### 【音乐互动工具】': '音乐互动',
+    '### 关于《彼方》': '彼方功能',
+    '### 此刻的交流节奏': '当前交流引导',
+    '### 此刻这句话怎么接': '当前交流引导',
+    '### 此刻的交流深度': '当前交流引导',
+    '### 谈话参与原则': '当前交流引导',
+    '### 当前谈话参与策略': '当前交流引导',
+    '### 协同功能': '协同功能',
+    '# 核心能力：HTML 模块生成': 'HTML卡片提示词',
+    '【主动消息排程·仅你可见】': '主动消息提示词',
+    '【你还挂着这些排程·仅你可见】': '主动消息提示词',
+    '【你可以给自己排下一条】': '主动消息提示词',
+};
+
+function chatCategoryAtLine(line: string): string | undefined {
+    if (Object.hasOwn(CHAT_SOURCE_HEADERS, line)) return CHAT_SOURCE_HEADERS[line];
+    if (/^### 世界书 · /.test(line)) return '世界观与世界书';
+    if (/^### \[私密档案: .*\] \(Private Impression\)$/.test(line)) return '角色认知与印象';
+    if (/^### (?:📔|📒|📝)【/.test(line) || /^### .+ 的生活记录（潜意识背景）$/.test(line)) return '日记、笔记与生活记录';
+    if (/^## Thinking 阶段\(/.test(line)) return '内心独白提示词';
+    if (line.startsWith('[CRITICAL: 双语输出模式') || line.startsWith('[Reminder:')) return '双语功能提示词';
+    if (line.startsWith('[MCP ') || line.startsWith('[外部工具已接入 —— ')) return 'MCP工具提示词';
+    if (line.startsWith('[System: 实时状态')) return '时间、日程与实时状态';
+    if (line.startsWith('[系统提示｜模式切换')) return '固定聊天规则';
+    if (line.startsWith('[系统提示: 语音消息功能当前未开启。')) return '固定聊天规则';
+    return undefined;
+}
+
+/** Group main-chat system text without changing or retaining its contents. */
+function splitChatSystemBlocks(text: string): PromptBlockStat[] {
     const lines = text.split('\n');
-    const headers = findBlockHeaders(lines);
+    const fenceAt = fenceToggleLines(lines);
+    let inFence = false;
+    let label = chatCategoryAtLine((lines.find(line => line.trim()) || '').replace(/\r$/, '')) || '补充系统提示';
+    const totals = new Map<string, number>();
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const header = headers.get(i);
-        if (header) {
-            if (chars > 0) out.push({ label, chars });
-            label = header.slice(0, BLOCK_LABEL_MAX);
-            chars = line.length + 1;
-            sawHeader = true;
-        } else {
-            chars += line.length + 1;
-        }
+        if (fenceAt.has(i)) inFence = !inFence;
+        if (!inFence) label = chatCategoryAtLine(lines[i].replace(/\r$/, '')) || label;
+        const chars = lines[i].length + (i < lines.length - 1 ? 1 : 0);
+        if (chars) totals.set(label, (totals.get(label) || 0) + chars);
     }
-    if (chars > 0) out.push({ label, chars });
-    if (!sawHeader && out.length === 1) {
-        const firstLine = text.trimStart().split('\n', 1)[0] || '(空 system)';
-        out[0] = { ...out[0], label: firstLine.slice(0, BLOCK_LABEL_MAX) };
-    }
-    return out;
+    return [...totals].map(([label, chars]) => ({ label, chars }));
+}
+
+function mergePromptBlocks(blocks: PromptBlockStat[]): PromptBlockStat[] {
+    const totals = new Map<string, number>();
+    for (const block of blocks) totals.set(block.label, (totals.get(block.label) || 0) + block.chars);
+    return [...totals].map(([label, chars]) => ({ label, chars }));
 }
 
 /**
@@ -469,9 +527,55 @@ export const isFixedPromptBlockLabel = (label: string): boolean =>
 
 const MAX_BREAKDOWN_BLOCKS = 48;
 
+// 二次整理把召回批次作为最后一条 user 消息发送，需与聊天历史分开展示。
+const isRecalledMemoryMessage = (role: unknown, content: unknown): boolean =>
+    role === 'user' && typeof content === 'string' && content.startsWith('本次召回记忆：\n');
+
+/** Read the writer's reference envelope for logging only; never rewrite the request. */
+function splitRecollectionReference(text: string): PromptBlockStat[] | undefined {
+    if (!text.startsWith(RECOLLECTION_REFERENCE_PREFIX)) return undefined;
+    const unsplit = [{ label: '回忆参考资料（未拆分）', chars: text.length }];
+    try {
+        const entries = readRecollectionReference(text);
+        if (!entries) return unsplit;
+        const totals = new Map<string, number>();
+        let userCount = 0, assistantCount = 0, contentChars = 0;
+        const add = (label: string, chars: number) => {
+            if (chars) totals.set(label, (totals.get(label) || 0) + chars);
+        };
+        for (const entry of entries) {
+            contentChars += entry.content.length;
+            if (entry.source === '当前对话参考片段') {
+                const isUser = entry.role === 'user';
+                if (isUser) userCount++; else assistantCount++;
+                add(isUser ? '聊天历史·用户消息' : '聊天历史·角色消息', entry.content.length);
+            } else if (entry.source === '世界书补充设定') {
+                add('世界书', entry.content.length);
+            } else {
+                let category = '角色人设';
+                for (const block of splitCaptureTextBlocks(entry.content)) {
+                    if (WORLDBOOK_LABEL_RE.test(block.label)) category = '世界书';
+                    else if (block.label === '你的身份 (Character)') category = '角色人设';
+                    else if (block.label === '世界观与设定 (World Settings)') category = '世界观';
+                    else if (block.label === '互动对象 (User)') category = '用户设定';
+                    add(category, block.end - block.start);
+                }
+            }
+        }
+        // Count escaped newlines/quotes, JSON keys and source labels separately.
+        // Decoded source lengths + envelope overhead equal the sent text length exactly.
+        add('参考资料·格式与标记', text.length - contentChars);
+        return [...totals].map(([label, chars]) => ({
+            label: label === '聊天历史·用户消息' ? `${label} ×${userCount}`
+                : label === '聊天历史·角色消息' ? `${label} ×${assistantCount}` : label,
+            chars,
+        }));
+    } catch { return unsplit; }
+}
+
 /**
  * 从 chat/completions 请求体算输入构成。解析不了 / 没有 messages 时返回 undefined。
- * system 逐块统计，历史消息按角色聚合（用户只关心"内置注入哪块肥"，不关心第几条历史）。
+ * 主聊天 system 按资料类别统计，其他请求按标题分块；历史消息按角色聚合。
  */
 export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefined {
     try {
@@ -481,6 +585,11 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
         }
         const messages = parsed?.messages;
         if (!Array.isArray(messages) || messages.length === 0) return undefined;
+        const recollectionRequest = messages.some(msg => msg?.role === 'user'
+            && typeof msg.content === 'string' && msg.content.startsWith(RECOLLECTION_REFERENCE_PREFIX));
+        const mainChatRequest = messages.some(msg => msg?.role === 'system' && typeof msg.content === 'string'
+            && msg.content.includes('### 你的身份 (Character)')
+            && msg.content.includes('### 聊天 App 行为规范 (Chat App Rules)'));
 
         const out: PromptBlockStat[] = [];
         let userChars = 0, userCount = 0, asstChars = 0, asstCount = 0, otherChars = 0, otherCount = 0;
@@ -492,9 +601,18 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
         for (const msg of messages) {
             const text = contentToText(msg?.content);
             if (msg?.role === 'system') {
-                out.push(...splitSystemBlocks(text));
+                // This request carries its writing task in system and all references in user.
+                // Classify by the reference envelope, not wording that users may revise.
+                if (recollectionRequest) {
+                    out.push({ label: '回忆写作任务', chars: text.length });
+                } else out.push(...(mainChatRequest ? splitChatSystemBlocks(text) : splitSystemBlocks(text)));
             } else if (msg?.role === 'user') {
-                if (text.length > HUGE_USER_MSG_SPLIT_CHARS && countBlockHeaders(text) >= 2) {
+                const referenceBlocks = splitRecollectionReference(text);
+                if (referenceBlocks) {
+                    out.push(...referenceBlocks);
+                } else if (isRecalledMemoryMessage(msg.role, text)) {
+                    out.push({ label: '本次召回记忆', chars: text.length });
+                } else if (!mainChatRequest && text.length > HUGE_USER_MSG_SPLIT_CHARS && countBlockHeaders(text) >= 2) {
                     out.push(...splitSystemBlocks(text));
                 } else {
                     userChars += text.length; userCount++;
@@ -520,11 +638,15 @@ export function buildPromptBreakdown(body: unknown): PromptBlockStat[] | undefin
         if (otherCount) out.push({ label: `其他消息（tool 等）×${otherCount}`, chars: otherChars });
         if (out.length === 0) return undefined;
 
-        // 限容：病态多块时合并尾巴，保证单条记录体积可控
+        // Main chat has bounded semantic categories, regardless of heading count.
+        if (mainChatRequest) return mergePromptBlocks(out);
+
+        // Other tools may have unbounded headings: retain the largest blocks, not the earliest.
         if (out.length > MAX_BREAKDOWN_BLOCKS) {
-            const head = out.slice(0, MAX_BREAKDOWN_BLOCKS - 1);
-            const restChars = out.slice(MAX_BREAKDOWN_BLOCKS - 1).reduce((sum, b) => sum + b.chars, 0);
-            head.push({ label: `（其余 ${out.length - (MAX_BREAKDOWN_BLOCKS - 1)} 块合计）`, chars: restChars });
+            const sorted = [...out].sort((a, b) => b.chars - a.chars);
+            const head = sorted.slice(0, MAX_BREAKDOWN_BLOCKS - 1);
+            const restChars = sorted.slice(MAX_BREAKDOWN_BLOCKS - 1).reduce((sum, b) => sum + b.chars, 0);
+            head.push({ label: `（其余 ${out.length - (MAX_BREAKDOWN_BLOCKS - 1)} 个较小板块合计）`, chars: restChars });
             return head;
         }
         return out;
@@ -726,6 +848,19 @@ export function buildApiRequestCapture(input: {
         const message: Record<string, unknown> = rawMessage && typeof rawMessage === 'object' ? rawMessage as Record<string, unknown> : { content: rawMessage };
         const role = typeof message.role === 'string' ? message.role : 'unknown';
         const content = message.content;
+        if (typeof content === 'string' && isRecalledMemoryMessage(role, content)) {
+            sections.push({
+                id: `message-${messageIndex}`,
+                label: '本次召回记忆',
+                kind: 'memory',
+                chars: content.length,
+                source: CAPTURE_SOURCE_DESCRIPTIONS.memory,
+                path: `messages[${messageIndex}].content`,
+                role,
+                messageIndex,
+            });
+            return;
+        }
         const shouldSplit = typeof content === 'string' && (
             role === 'system' || (content.length > 8000 && splitCaptureTextBlocks(content).length > 1)
         );

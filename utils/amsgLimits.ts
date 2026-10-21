@@ -369,7 +369,7 @@ export interface LimitsBriefInput {
 }
 
 /**
- * 「用户给你定的规矩」那一段：只列跟排程有关、而且真在限制它的几条，说成事实。
+ * 「排程限制」那一段：只列跟排程有关、而且真在限制它的几条，说成事实。
  * 超出的系统会直接打回——把额度摆在它面前，比让它排了再被打回省一轮。
  */
 export const buildLimitsBrief = (input: LimitsBriefInput): string => {
@@ -377,20 +377,21 @@ export const buildLimitsBrief = (input: LimitsBriefInput): string => {
   const lines: string[] = [];
   if (Number.isFinite(limits.maxUnansweredSends)) {
     const left = Math.max(0, limits.maxUnansweredSends - input.committedSends);
-    lines.push(`- 对方没回的时候，你最多连着主动找对方 ${limits.maxUnansweredSends} 次（一次可以说好几句；排好还没发的也算），`
-      + (left > 0 ? `现在还能再排 ${left} 次。` : '现在一次都不能再排了，等对方回复。'));
+    lines.push(`- 对方未回复期间，最多主动联系 ${limits.maxUnansweredSends} 次，已排未发的也计入；`
+      + (left > 0 ? `目前还能安排 ${left} 次。` : '目前剩余 0 次，等对方回复后再安排。')
+      + '一次联系可含多个气泡。');
   }
   if (limits.minSendGapMs > 0) {
-    lines.push(`- 两次主动找对方之间至少隔 ${describeMinutes(Math.round(limits.minSendGapMs / 60_000))}`
-      + (input.earliestText ? `，这次最早排到 ${input.earliestText}。` : '。'));
+    lines.push(`- 两次主动联系至少间隔 ${describeMinutes(Math.round(limits.minSendGapMs / 60_000))}`
+      + (input.earliestText ? `；最早可安排在 ${input.earliestText}。` : '。'));
   }
   if (input.dailyRemaining !== undefined && Number.isFinite(limits.dailySendCap)) {
     lines.push(input.dailyRemaining > 0
-      ? `- 今天还能再主动找对方 ${input.dailyRemaining} 次。`
-      : '- 今天主动找对方的次数已经用完了，要排就排到明天。');
+      ? `- 今天还能主动联系 ${input.dailyRemaining} 次。`
+      : '- 今日主动联系额度已用完，请安排在明天。');
   }
-  lines.push(`- 同时最多挂 ${limits.maxActiveTasks} 个排程任务，现在挂着 ${input.activeTasks} 个。`);
-  if (!limits.allowSelfRecurring) lines.push('- 只能排一次性的，不能排每天/每周重复的。');
-  if (!limits.allowSelfForce) lines.push('- 排的消息到点碰上对方正在聊天会自动作罢（转成你在聊天里自然带出），没有「到点必发」。');
-  return ['用户给你定的规矩（系统照着执行：超出的排不上，排上了到点也不发）：', ...lines].join('\n');
+  lines.push(`- 最多同时保留 ${limits.maxActiveTasks} 个任务，目前有 ${input.activeTasks} 个。`);
+  if (!limits.allowSelfRecurring) lines.push('- 仅支持一次性任务。');
+  if (!limits.allowSelfForce) lines.push('- 到点结合最新对话决定是否发送，不支持「到点必发」。');
+  return ['排程限制：', ...lines].join('\n');
 };

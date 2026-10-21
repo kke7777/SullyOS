@@ -76,6 +76,7 @@ interface ChatInputAreaProps {
     htmlModeEnabled?: boolean;
     // 思考过程展示（会话级）
     showThinkingChain?: boolean;
+    imageGenerationEnabled?: boolean;
     // Input style
     inputStyle?: 'default' | 'rounded' | 'flat' | 'wechat' | 'ios' | 'telegram' | 'discord' | 'pixel';
     sendButtonStyle?: 'circle' | 'pill' | 'minimal';
@@ -105,6 +106,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     luckinActivated = false,
     htmlModeEnabled = false,
     showThinkingChain = false,
+    imageGenerationEnabled,
     inputStyle = 'default',
     sendButtonStyle = 'circle',
     chromeStyle = 'soft',
@@ -601,6 +603,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           </div>)}
           <span className="text-xs font-bold">{htmlModeEnabled ? 'HTML已开' : 'HTML模式'}</span>
         </button>,
+        imageGenerationEnabled !== undefined && <button key="image-generation" onClick={() => onPanelAction('image-generation')} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}>
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border ${imageGenerationEnabled ? 'bg-violet-100 text-violet-600 border-violet-300' : 'bg-slate-50 text-slate-500 border-slate-200'}`}><Image className="w-6 h-6" weight="bold" /></div>
+            <span className="text-xs font-bold">{imageGenerationEnabled ? '生图已开' : '聊天生图'}</span>
+        </button>,
         <button key="thinking-settings"
           onClick={() => onPanelAction('thinking-settings')}
           className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${acnh ? 'text-[#725d42]' : isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}
@@ -650,7 +656,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           </span>
           <span className="text-xs font-bold">收藏</span>
         </button>
-    ].filter(tile=>!compactHome||['transfer','poke','image','reroll','memory-link','favorites'].includes(String(tile.key)));
+    ].filter((tile): tile is React.ReactElement => !!tile).filter(tile=>!compactHome||['transfer','poke','image','reroll','memory-link','favorites'].includes(String(tile.key)));
     const actionPageCount = Math.max(1, Math.ceil(actionTiles.length / ACTION_PAGE_SIZE));
     useEffect(() => setActionsPage(page => Math.min(page, actionPageCount - 1)), [actionPageCount]);
 

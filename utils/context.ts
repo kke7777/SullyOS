@@ -9,6 +9,7 @@ import { normalizeUserImpression } from './impression';
 import {buildHomePetContext} from './homePetContext';
 import { buildHomeDefinitionContext } from './homeDefinitionContext';
 import { isScheduleFeatureOn } from './scheduleFeature';
+import { isEmotionFeatureOn } from './emotionFeature';
 import { buildScheduleInjection as buildScheduleInjectionText } from './scheduleInjection';
 import { TIME_FRAMING_CONVERSATIONAL } from './timeFramingNote';
 import { resolveCharTimeZone, nowInTimeZone, tzAwarenessNote, interactionGapNote } from './timezone';
@@ -43,7 +44,7 @@ export const ContextBuilder = {
         });
     },
     buildEmotionContext: (char: CharacterProfile, options?: EmotionContextOptions): string => {
-        if ((options?.surface !== 'chat' && options?.surface !== 'home') || !isScheduleFeatureOn(char) || !char.emotionConfig?.enabled) return '';
+        if ((options?.surface !== 'chat' && options?.surface !== 'home') || !isEmotionFeatureOn(char)) return '';
         const inner = options.innerState ?? getLastInnerState(char.id);
         return (char.buffInjection ? char.buffInjection + '\n\n' : '')
             + (inner.trim() ? '### 当前内心想法\n' + inner.trim() + '\n（这是你的内心状态，不是台词，不必说出口；让它自然影响你的回应。）\n\n' : '');
@@ -554,6 +555,8 @@ const renderCoreContext = async (
              * 只有聊天主路径（chatPrompts.buildSystemPromptParts）用；其他 App 不传，行为不变。
              */
             deferVolatile?: boolean;
+            /** Reference-only tasks supply their own source material, including empty states. */
+            omitMemoryBank?: boolean;
             emotion?: EmotionContextOptions;
         },
     ): Promise<string> => {
@@ -642,29 +645,31 @@ const renderCoreContext = async (
         }
 
         // 5. 记忆库 (Memory Bank)
-        context += `### 记忆系统 (Memory Bank)\n`;
-        let memoryContent = "";
+        if (!layout?.omitMemoryBank) {
+            context += `### 记忆系统 (Memory Bank)\n`;
+            let memoryContent = "";
 
-        const readableMemories = readableContextMemories(char, includeDetailedMemories);
-        if (readableMemories.monthly.length) {
-            memoryContent += '**长期核心记忆 (Key Memories)**:\n';
-            readableMemories.monthly.forEach(({ date, summary }) => {
-                memoryContent += `- [${date}]: ${summary}\n`;
-            });
-        }
-        let details = '';
-        readableMemories.daily.forEach(({ month, entries }) => {
-            if (entries.length) {
-                details += `\n> 详细回忆 [${month}]:\n`;
-                entries.forEach(m => { details += `  - ${m.date} (${m.mood || 'rec'}): ${m.summary}\n`; });
+            const readableMemories = readableContextMemories(char, includeDetailedMemories);
+            if (readableMemories.monthly.length) {
+                memoryContent += '**长期核心记忆 (Key Memories)**:\n';
+                readableMemories.monthly.forEach(({ date, summary }) => {
+                    memoryContent += `- [${date}]: ${summary}\n`;
+                });
             }
-        });
-        if (details) memoryContent += `\n**当前激活的详细回忆 (Active Recall)**:${details}`;
+            let details = '';
+            readableMemories.daily.forEach(({ month, entries }) => {
+                if (entries.length) {
+                    details += `\n> 详细回忆 [${month}]:\n`;
+                    entries.forEach(m => { details += `  - ${m.date} (${m.mood || 'rec'}): ${m.summary}\n`; });
+                }
+            });
+            if (details) memoryContent += `\n**当前激活的详细回忆 (Active Recall)**:${details}`;
 
-        if (!memoryContent) {
-            memoryContent = "(暂无特定记忆，请基于当前对话互动)";
+            if (!memoryContent) {
+                memoryContent = "(暂无特定记忆，请基于当前对话互动)";
+            }
+            context += `${memoryContent}\n\n`;
         }
-        context += `${memoryContent}\n\n`;
 
         // 5b. 记忆宫殿 (Memory Palace) — 向量检索结果
         // 已准备好的向量召回独立于神经链接详细日志；这里不发起额外召回。
@@ -689,19 +694,6 @@ const renderCoreContext = async (
         context += formatWorldbookSection(worldbookSections.authorsNoteTop, '世界书 · 作者注释顶部');
         context += formatWorldbookSection(worldbookSections.authorsNoteBottom, '世界书 · 作者注释底部');
         context += formatWorldbookSection(worldbookSections.atDepth, '世界书 · 深度条目（上下文模式）');
-
-        // 7. 表达底线 (Anti-Filler) —— 全 App 通用的精简版防套话提示。
-        // 模型八股（空泛感慨、万能句式）是"没话找话"时的填充物，这里只做正向引导
-        // （去挖具体素材），不列任何禁语——把禁语写进提示词反而会激活它（粉色大象）。
-        // 完整方法版在 datePrompts 的 DIG_DEEPER_BLOCK（见面模式专用，可按角色开关）。
-        // 群聊流（groupOptions）跳过：多成员场景会重复注入 N 份，群聊侧暂不接入。
-        if (!groupOptions) {
-            context += `### 表达底线（Anti-Filler）
-
-当你觉得“没什么可说”的时候，你可以用那些珍贵的素材——对方的用词、ta怎么说的、ta没说的部分、此刻的情境、你们的过去、你心里闪过的念头——挑一两条，让它们自然融入你的语言中。
-
-`;
-        }
 
         // Debug: warn about missing context sections
         const missing: string[] = [];

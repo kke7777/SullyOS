@@ -23,9 +23,9 @@ const schedule: RenderableSchedule = {
 const at = (hour: number, minute = 0) => new Date(2026, 7, 2, hour, minute);
 
 describe('凌晨 0-5 点算前一夜的延续', () => {
-    it('凌晨一点、今天第一条还没到 → 独白取「晚」档，不是清晨那句', () => {
+    it('凌晨一点、今天第一条还没到 → 不注入旧的早晚独白', () => {
         const out = buildScheduleInjection(schedule, undefined, at(1));
-        expect(out).toContain('夜里安静下来了');
+        expect(out).not.toContain('夜里安静下来了');
         expect(out).not.toContain('清晨的空气很好');
     });
 
@@ -38,10 +38,10 @@ describe('凌晨 0-5 点算前一夜的延续', () => {
         expect(out).toContain('07:00');
     });
 
-    it('过了 5 点还没到第一条 → 回到原来的白天措辞与「早」档独白', () => {
+    it('过了 5 点还没到第一条 → 回到原来的白天措辞，仍不注入独白', () => {
         const out = buildScheduleInjection(schedule, undefined, at(6));
         expect(out).toContain('今天还没开始活动，稍后先晨跑（07:00）');
-        expect(out).toContain('清晨的空气很好');
+        expect(out).not.toContain('清晨的空气很好');
         expect(out).not.toContain('夜深了');
     });
 
@@ -49,7 +49,7 @@ describe('凌晨 0-5 点算前一夜的延续', () => {
         const out = buildScheduleInjection(schedule, undefined, at(14));
         expect(out).toContain('当前时段：13:00 你正在写稿');
         expect(out).toContain('之后安排：22:00 看剧');
-        expect(out).toContain('稿子卡在第三段');
+        expect(out).not.toContain('稿子卡在第三段');
     });
 
     it('ChatApp 主请求可注入完整日程，并用一个简单标签教角色调整计划', () => {
@@ -121,7 +121,7 @@ describe('includeClock=false 时日程不报钟点', () => {
 });
 
 describe('意识流档位', () => {
-    it('一天三档的通用取法本身没变（小剧场、桌面小屋还按它取色）', () => {
+    it('一天三档的通用取法本身没变（仅保留兼容导出）', () => {
         expect(getFlowNarrativeKey(1)).toBe('morning');
         expect(getFlowNarrativeKey(9)).toBe('morning');
         expect(getFlowNarrativeKey(13)).toBe('afternoon');
@@ -160,7 +160,7 @@ describe('日程不是给对方列的待办', () => {
         const out = buildScheduleInjection(withUserPlan, '脑子里还转着那段稿子。', at(14), {
             includeChangeInstruction: true,
         });
-        expect(out).toContain('不是台词');  // 有独白，footnote 在
+        expect(out).not.toContain('不是台词');  // 旧的独白参数也被忽略
         expect(out).toContain(SCOPE);       // 分寸句也在，两句各管各的
     });
 

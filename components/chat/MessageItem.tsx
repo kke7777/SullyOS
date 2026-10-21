@@ -3116,6 +3116,7 @@ const MessageItem = React.memo(({
                 ) : (
                     <div className="px-4 py-6 rounded-2xl bg-slate-100 text-slate-400 text-xs italic text-center min-w-[120px]">[图片已丢失]</div>
                 )}
+                {typeof m.metadata?.imageGeneration?.costUsd === 'number' && <div className="mt-1 text-[10px] text-slate-400">本次生图 ${m.metadata.imageGeneration.costUsd.toFixed(4)}</div>}
             </div>
         );
     }

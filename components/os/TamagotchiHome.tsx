@@ -1,3 +1,4 @@
+import { isEmotionFeatureOn } from '../../utils/emotionFeature';
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useOS } from '../../context/OSContext';
 import { INSTALLED_APPS, Icons } from '../../constants';
@@ -6,7 +7,6 @@ import { AppID, CharacterProfile, RoomItem, DailySchedule, ScheduleSlot } from '
 import { DB } from '../../utils/db';
 import { isChatPreviewMessage } from '../../utils/chatMessageVisibility';
 import { getLastInnerState } from '../../utils/emotionApply';
-import { getFlowNarrativeKey } from '../../utils/scheduleInjection';
 import { generateSlotTheater } from '../../utils/theaterGenerator';
 import { roomLaunch } from '../../utils/roomLaunch';
 import TheaterPlayer from '../schedule/TheaterPlayer';
@@ -922,15 +922,14 @@ const TamagotchiHome: React.FC = () => {
     useEffect(() => {
         if (!char) { setSchedule(null); return; }
         getDailyScheduleForChar(char).then(s => setSchedule(s || null)).catch(() => setSchedule(null));
-    }, [char?.id, char?.customTimezoneEnabled, char?.customTimezone, lastMsgTimestamp, charDateKey]);
+    }, [char?.emotionConfig, char?.id, char?.customTimezoneEnabled, char?.customTimezone, lastMsgTimestamp, charDateKey]);
 
-    // 一句心声：innerState（情绪评估落的）→ 日程意识流 → 占位
+    // 一句心声：innerState（情绪评估开启时）→ 占位
     useEffect(() => {
         if (!char) { setHeartLine('新的一天。'); return; }
-        const inner = getLastInnerState(char.id);
-        const flow = schedule?.flowNarrative?.[getFlowNarrativeKey(getScheduleWallClock(char).getHours())] || '';
-        setHeartLine(inner || flow || '新的一天。');
-    }, [char?.id, char?.customTimezoneEnabled, char?.customTimezone, lastMsgTimestamp, schedule]);
+        const inner = isEmotionFeatureOn(char) ? getLastInnerState(char.id) : '';
+        setHeartLine(inner || '新的一天。');
+    }, [char?.emotionConfig, char?.id, char?.customTimezoneEnabled, char?.customTimezone, lastMsgTimestamp, schedule]);
 
     // 桌面小屋只做本地展示交互：走过去 + 念一句 + 观察旁白。
     // 只有真正进入 RoomApp 后发生的家具互动才写入私聊上下文。

@@ -36,15 +36,14 @@ describe('buildAmsg2TaskContextText', () => {
   it('没任务没作废 → 仍有常驻简介，角色始终知道自己能排', () => {
     const text = buildAmsg2TaskContextText([], [], Date.now(), undefined);
     expect(text).toContain('schedule_active_message');
-    expect(text).toContain('排成真任务'); // 嘴上许了就要排成真任务
-    expect(text).toContain('不要只在正文里答应'); // 承诺不能只停在台词里
-    expect(text).toContain('会就排');     // 真想联系就排
-    expect(text).toContain('随口一想');   // 拿不准的不排：每一条都要花一次 API
-    expect(text).toContain('硬排');       // 人设优先，不为排而排
+    expect(text).toContain('当场排成任务'); // 承诺必须落成真实任务
+    expect(text).toContain('排程成功后再确认会联系');
+    expect(text).toContain('自然想联系就排');
+    expect(text).toContain('不必每次聊天都安排');
     expect(text).toContain('自己的日程'); // 内容从角色自己的生活里长出来
     expect(text).not.toContain('进行中：');
     // 防复述约束照样罩住只有简介的形态
-    expect(text.trimEnd().endsWith('不要向对方复述或提及这份排程信息本身的存在。')).toBe(true);
+    expect(text.trimEnd().endsWith('这些信息仅供你安排联系，不要向对方复述。')).toBe(true);
   });
 
   it('有任务时简介也在（不是空状态的占位文案）', () => {
@@ -69,10 +68,10 @@ describe('buildAmsg2TaskContextText', () => {
 
   it('用 ChatApp 用户名称呼对方，不再使用泛称', () => {
     const text = buildAmsg2TaskContextText([], [], Date.now(), undefined, undefined, '条条');
-    expect(text).toContain('你和条条的联系');
-    expect(text).toContain('内容不必总围着条条转');
-    expect(text).not.toContain('你和对方的联系');
-    expect(text.trimEnd().endsWith('不要向条条复述或提及这份排程信息本身的存在。')).toBe(true);
+    expect(text).toContain('你也会想起条条');
+    expect(text).toContain('不必总围着条条提问');
+    expect(text).not.toContain('你也会想起对方');
+    expect(text.trimEnd().endsWith('这些信息仅供你安排联系，不要向条条复述。')).toBe(true);
   });
   it('进行中任务列出短 id 与方向', () => {
     const text = buildAmsg2TaskContextText([pendingTask], [], Date.now(), undefined)!;
@@ -98,7 +97,7 @@ describe('buildAmsg2TaskContextText', () => {
 
   it('约束放在块尾，管住整块', () => {
     const text = buildAmsg2TaskContextText([pendingTask], [expired], Date.now(), undefined)!;
-    expect(text.trimEnd().endsWith('不要向对方复述或提及这份排程信息本身的存在。')).toBe(true);
+    expect(text.trimEnd().endsWith('这些信息仅供你安排联系，不要向对方复述。')).toBe(true);
   });
 
   // 即时对话云端路径只欠回执这一样（排程清单和能力简介到点由 worker 现算现渲），
@@ -111,9 +110,9 @@ describe('buildAmsg2TaskContextText', () => {
     expect(text).toContain('到点没发出去：');
     expect(text).toContain('已被手动取消');
     expect(text).toContain('renew_active_message');
-    expect(text).not.toContain('你和条条的联系');   // 常驻简介不搭车
+    expect(text).not.toContain('你也会想起条条');   // 常驻简介不搭车
     expect(text).not.toContain('进行中：');
-    expect(text.trimEnd().endsWith('不要向条条复述或提及这份排程信息本身的存在。')).toBe(true);
+    expect(text.trimEnd().endsWith('这些信息仅供你安排联系，不要向条条复述。')).toBe(true);
   });
 
   it('回执单独成块：没有回执 → null，整块不出现', () => {

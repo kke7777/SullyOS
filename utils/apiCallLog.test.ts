@@ -19,6 +19,76 @@ import {
     updateApiRequestCaptureUsage,
 } from './apiCallLog';
 import { formatWorldbookSection, resolveWorldbookEntries } from './worldbook';
+import { buildRecollectionPrompt } from './memoryPalace/recollection';
+import { formatRecollectionReference, type RecollectionReferenceEntry } from './memoryPalace/recollectionReference';
+
+describe('recollection reference breakdown', () => {
+    const prefix = '参考资料（角色设定、当前对话及补充设定）：\n';
+
+    it.each([[1, false], [1600, false], [1, true], [1600, true]] as const)('separates settings and actual history, preserving all characters and the request (%i, compact=%s)', (repeat, compact) => {
+        const character = '### 你的身份 (Character)\n露易丝，喜欢画画。\n## 性格\n温柔。\n';
+        const world = '### 世界观与设定 (World Settings)\n住在巴黎。\n';
+        const book = '### 世界书 · 示例消息后\n画室的窗台有鸢尾花。\n';
+        const user = '### 互动对象 (User)\n咲咲\n## 喜好\n喜欢漫画。\n';
+        const historyUser = '## 聊天里自己写的标题\n还记得“那一天”吗？😀\\'.repeat(repeat);
+        const historyAssistant = '记得，我们一起看过海。';
+        const extraBook = '另一条在历史中插入的世界书。';
+        const entries: RecollectionReferenceEntry[] = [
+            { source: '角色与关系设定', role: 'system', content: character + world + book + user },
+            { source: '当前对话参考片段', role: 'user', content: historyUser },
+            { source: '世界书补充设定', role: 'assistant', content: extraBook },
+            { source: '当前对话参考片段', role: 'assistant', content: historyAssistant },
+        ];
+        const reference = compact ? formatRecollectionReference(entries) : prefix + JSON.stringify(entries);
+        const body = { messages: [
+            { role: 'system', content: buildRecollectionPrompt('露易丝', '咲咲') },
+            { role: 'user', content: reference },
+            { role: 'user', content: '本次召回记忆：\n在海边度过了一天。' },
+        ] };
+        const before = JSON.stringify(body);
+        const blocks = buildPromptBreakdown(body)!;
+        expect(blocks).toEqual(expect.arrayContaining([
+            { label: '角色人设', chars: character.length },
+            { label: '用户设定', chars: user.length },
+            { label: '世界观', chars: world.length },
+            { label: '世界书', chars: book.length + extraBook.length },
+            { label: '聊天历史·用户消息 ×1', chars: historyUser.length },
+            { label: '聊天历史·角色消息 ×1', chars: historyAssistant.length },
+            { label: '回忆写作任务', chars: body.messages[0].content.length },
+            { label: '本次召回记忆', chars: body.messages[2].content.length },
+        ]));
+        expect(blocks.find(block => block.label === '参考资料·格式与标记')!.chars).toBeGreaterThan(0);
+        expect(blocks.reduce((sum, block) => sum + block.chars, 0)).toBe(body.messages.reduce((sum, message) => sum + message.content.length, 0));
+        expect(JSON.stringify(body)).toBe(before);
+    });
+
+    it.each(['broken', '{}', '[{"source":"unknown","role":"user","content":"内容"}]', '[{"source":"当前对话参考片段","role":"user","content":null}]'])('keeps malformed references visible without throwing (%s)', json => {
+        const content = prefix + json;
+        expect(buildPromptBreakdown({ messages: [{ role: 'user', content }] })).toEqual([
+            { label: '回忆参考资料（未拆分）', chars: content.length },
+        ]);
+    });
+});
+
+describe('recalled-memory request visibility', () => {
+    it.each(['海边的日落', '## 海边旅行\n' + '那天一起看海。'.repeat(1200) + '\n## 回家的路\n我们撑着伞'])('shows the complete recalled batch separately from chat history', memory => {
+        const recalled = `本次召回记忆：\n${memory}`;
+        const messages = [
+            { role: 'user', content: '还记得那天吗？' },
+            { role: 'assistant', content: '记得呀。' },
+            { role: 'user', content: recalled },
+        ];
+        const breakdown = buildPromptBreakdown({ messages })!;
+        expect(breakdown).toContainEqual({ label: '本次召回记忆', chars: recalled.length });
+        expect(breakdown).toContainEqual({ label: '聊天历史·用户消息 ×1', chars: messages[0].content.length });
+        expect(breakdown.reduce((sum, block) => sum + block.chars, 0)).toBe(messages.reduce((sum, message) => sum + message.content.length, 0));
+        const capture = buildApiRequestCapture({ url: 'https://example.com/v1/chat/completions', body: { messages } });
+        const section = capture.sections.find(section => section.kind === 'memory')!;
+        expect(section).toMatchObject({ label: '本次召回记忆', messageIndex: 2, role: 'user', chars: recalled.length });
+        expect(getApiRequestCaptureSectionContent(capture, section)).toBe(recalled);
+        expect(capture.sections.filter(section => section.kind === 'memory')).toHaveLength(1);
+    });
+});
 
 describe('one-shot full API request capture', () => {
     it('uses the in-memory armed flag on the disabled hot path instead of reading localStorage per request', () => {
@@ -367,7 +437,10 @@ describe('buildPromptBreakdown', () => {
             '聊天历史·用户消息 ×2',
             '聊天历史·角色消息 ×1',
         ]);
-        // 字数守恒：system 各块之和 = 原文长度 + 每行换行补偿
+        // 字数守恒：只计算请求中实际存在的字符和换行。
+        expect(blocks.reduce((sum, block) => sum + block.chars, 0)).toBe(
+            JSON.parse(body).messages.reduce((sum: number, message: { content: string }) => sum + message.content.length, 0),
+        );
         const memBlock = blocks.find(b => b.label.startsWith('记忆系统'))!;
         expect(memBlock.chars).toBeGreaterThan(0);
         expect(blocks.find(b => b.label === '聊天历史·用户消息 ×2')!.chars).toBe(4);
@@ -398,7 +471,7 @@ describe('buildPromptBreakdown', () => {
         expect(buildPromptBreakdown(undefined)).toBeUndefined();
     });
 
-    it('病态多块时合并尾巴限容', () => {
+    it('病态多块时合并较小项限容', () => {
         const sys = Array.from({ length: 80 }, (_, i) => `### 块${i}\n内容${i}`).join('\n');
         const blocks = buildPromptBreakdown({ messages: [{ role: 'system', content: sys }] })!;
         expect(blocks.length).toBeLessThanOrEqual(48);

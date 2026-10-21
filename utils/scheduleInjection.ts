@@ -73,13 +73,11 @@ export const resolveScheduleSlots = (
 /**
  * 构建日程注入文本
  *
- * 两段式，独立叠加：
- * 1) 当前时段硬事实——每轮都注入，不受 evolvedNarrative 影响
- * 2) 意识流独白——evolvedNarrative > flowNarrative > 当前 slot innerThought
+ * 仅渲染活动安排。旧 flowNarrative、innerThought 和第二参数均不再注入。
  */
 export const buildScheduleInjection = (
     schedule: RenderableSchedule | null,
-    evolvedNarrative?: string,
+    _legacyNarrative?: string,
     now: Date = new Date(),
     options: ScheduleInjectionOptions = {},
 ): string => {
@@ -112,32 +110,6 @@ export const buildScheduleInjection = (
             : `今天还没开始活动，稍后先${withTime(nextSlot.activity, nextSlot.startTime)}\n`;
     }
 
-    // 2. 意识流独白
-    let narrative = '';
-    if (evolvedNarrative) {
-        narrative = evolvedNarrative;
-    } else if (schedule.flowNarrative && Object.keys(schedule.flowNarrative).length > 0) {
-        // 前一夜的延续取「晚」档；其余照一天三档走。
-        const key = isPreDawnCarryOver ? 'evening' : getFlowNarrativeKey(now.getHours());
-        narrative = schedule.flowNarrative[key]
-            || schedule.flowNarrative['evening']
-            || schedule.flowNarrative['afternoon']
-            || schedule.flowNarrative['morning']
-            || '';
-    } else if (currentSlot?.innerThought) {
-        narrative = currentSlot.innerThought;
-    }
-
-    // 3. 拼接：硬事实 → 意识流（可选）
-    const preamble = `此刻你的心中盘旋着这些想法……\n`;
-    const footnote = `\n（不是台词，不用说出口——让它影响你的语气和情绪就好。）`;
-    // footnote 只跟着意识流独白走，管不到上面的日程行——那两段是「你正在做什么」的硬事实，
-    // 每轮全量注入且贴着生成点。日程是照着聊天记录生成的（生成侧明写「对话里提到的事
-    // 必须严格遵循」，意识系那档还把「惦记对方」列为推荐动作），对方随口说的计划因此
-    // 会渗进 slot 的 description；再加上角色能用 CHANGE_SCHEDULE 往里写任意文本，
-    // 表上就可能出现一件「跟对方有关、每轮都摆在眼前、没人说过该怎么对待」的事。
-    // 这块的注释自己就写过这条硬事实的推力：表上停在睡觉，角色每轮都被推着去道晚安。
-    // 换成「问问书看到哪了」，就是每轮追问进度的由来。
     const scopeNote = '（这张表是你自己的一天，不是给对方列的待办。里头要是有跟对方相关的事，'
         + '那也是你自己的惦记——话赶到了顺口带一句就够，不用追着问进展，也不用催对方去做。）';
 
@@ -152,9 +124,6 @@ export const buildScheduleInjection = (
         out += `你今天的完整日程：\n${rows.join('\n')}\n`;
     }
     out += slotHeader;
-    if (narrative) {
-        out += preamble + narrative + footnote;
-    }
     // 能改的是「当前这一条和它之后的」，所以两者有一个在就有落点。落点优先取下一条；
     // 一天最后一条日程开始之后没有下一条了，这时用当前这条——那条通常是睡觉，正好是
     // 最需要「我今晚不睡了」这个出口的时候。

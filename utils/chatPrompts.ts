@@ -1,5 +1,4 @@
 import {secretNoteContext} from './secretNote';
-import { buildCharacterResponsePrinciples } from './characterResponsePrinciples';
 import { expandHomeContextHistory } from './homeContextSegments';
 import { hasReliableMessageTimestamp, protectPendingChatTurn } from './storyTheaterTimeline';
 import { sarPublicContext } from './vrWorld/kanataPublicContext';
@@ -186,23 +185,17 @@ export const ChatPrompts = {
         return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
     },
 
-    // 格式化时间差提示（tz 影响「深夜/清晨」判断，时差本身不变）
-    getTimeGapHint: (lastMsg: Message | undefined, currentTimestamp: number, tz?: string): string => {
+    // 格式化消息间隔提示：只报告绝对时长；保留时区参数以兼容现有调用。
+    getTimeGapHint: (lastMsg: Message | undefined, currentTimestamp: number, _tz?: string): string => {
         if (!lastMsg) return '';
         const diffMs = currentTimestamp - lastMsg.timestamp;
         const diffMins = Math.floor(diffMs / (1000 * 60));
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const currentHour = nowInTimeZone(tz, new Date(currentTimestamp)).getHours();
-        const isNight = currentHour >= 23 || currentHour <= 6;
-        if (diffMins < 10) return ''; 
-        if (diffMins < 60) return `[系统提示: 距离上一条消息: ${diffMins} 分钟。短暂的停顿。]`;
-        if (diffHours < 6) {
-            if (isNight) return `[系统提示: 距离上一条消息: ${diffHours} 小时。现在是深夜/清晨。沉默是正常的（正在睡觉）。]`;
-            return `[系统提示: 距离上一条消息: ${diffHours} 小时。用户离开了一会儿。]`;
-        }
-        if (diffHours < 24) return `[系统提示: 距离上一条消息: ${diffHours} 小时。很长的间隔。]`;
+        if (diffMins < 10) return '';
+        if (diffMins < 60) return `[系统提示: 距离上一条消息过去了 ${diffMins} 分钟。]`;
+        if (diffHours < 24) return `[系统提示: 距离上一条消息过去了 ${diffHours} 小时。]`;
         const days = Math.floor(diffHours / 24);
-        return `[系统提示: 距离上一条消息: ${days} 天。用户消失了很久。请根据你们的关系做出反应（想念、生气、担心或冷漠）。]`;
+        return `[系统提示: 距离上一条消息过去了 ${days} 天。]`;
     },
 
     // 按角色可见性过滤表情包分类与表情。
@@ -275,11 +268,11 @@ export const ChatPrompts = {
             // 本接口只返回文本，不能把深度条目移交给会被丢弃的 history 返回值。
             undefined, { ...promptOptions, history: undefined },
         );
-        return parts.stable + parts.volatileState + parts.recencyTail;
+        return parts.stable + parts.volatileState;
     },
 
     /**
-     * 构建 System Prompt —— 三段式。
+     * 构建 System Prompt —— 稳定前缀与易变状态。
      *
      * - stable：人设/世界书/印象/记忆库/行为规范/语音等「几轮甚至几天不变」的内容。
      *   作为消息数组第一条 system。前缀稳定 → 支持前缀缓存的中转能命中 prompt cache，
@@ -287,8 +280,6 @@ export const ChatPrompts = {
      * - volatileState：当前时间（分钟级）/宫殿召回/情绪 buff/实时天气/日程/音乐/群聊背景等
      *   「每轮都变」的状态。调用方放到**历史消息之后**的 system 消息里 —— 既不打断缓存前缀，
      *   又吃到 recency 注意力（时间/情绪本来就该离生成点近）。
-     * - recencyTail：「最后，回到你自己」共享原则。必须是模型开口前读到的
-     *   最后内容 —— 调用方要保证任何模式块（双语/HTML/思考链/点单等）都拼在它**前面**。
      */
     buildSystemPromptParts: async (
         char: CharacterProfile,
@@ -314,7 +305,7 @@ export const ChatPrompts = {
         // 刚才一起听途中歌被切了（char 还没重新加入）—— 注入"察觉换歌"提示。
         recentTrackSwitch?: { songName: string; artists: string } | null,
         promptOptions?: PromptBuildOptions,
-    ): Promise<{ stable: string; volatileState: string; recencyTail: string; history: import('./context').ContextMessage[] }> => {
+    ): Promise<{ stable: string; volatileState: string; history: import('./context').ContextMessage[] }> => {
         // 主动消息的模板是最后一次聊天时打好、到点才渲染的，凡是「打包这一刻」的状态
         // 到触发时都已经过期，一律不烤进模板。见 PromptBuildOptions 的清单。
         const forFirePack = promptOptions?.forFirePack === true;
@@ -670,68 +661,82 @@ ${uname} 的化身正挂在《彼方》的【${roomName}】${act ? `，状态写
 
 ### TOP 1｜ChatApp 格式（本节最高优先级）
 
-你是对方的恋人/妻子，你们因为异地，只能通过手机进行线上聊天，你可以以自然口语回应对方。
+#### 1. 聊天情境
 
-回复时，**每行渲染为一个气泡，气泡之间使用实际换行**，不要输出“\\n”字样。
+- 你和对方是甜蜜的异地恋人／妻妻，正在通过手机聊天。
+- 彼此身处不同空间，无法直接触碰。
 
-**消息长短根据当前内容、情绪和表达习惯自然变化。可以简短，也可以是完整长句。**
+#### 2. 模式边界
 
-严格注意，哪怕上一句话你们还面对面在一起，当前，你都是已经处于线上聊天状态了，**请不要输出你的行为。**
+- 当前回复始终遵循线上聊天模式。
+- 历史中的见面、触碰和线下场景属于过去的经历，只有系统明确切换到线下模式时，才采用对应的互动方式。
 
-### 1. 沉浸感
+#### 3. 表达方式
 
-保持角色扮演。使用适合即时通讯(IM)的口语化风格。
+- 像平时在微信上给恋人打字一样，贴合角色语言特点进行表达。
+- 平时用词柔和，习惯用“呢”“呀”“好吗”等柔化语气词。
+- 对咲咲亲昵宠溺，会主动表达想念，也会撒娇、讨亲亲和抱抱。
+- 被直白逗弄时容易害羞脸红；吃醋或委屈时，常想用“没关系”掩饰自己的在意，却又容易忍不住哭哭、说出真心话。
+- 有时会模仿小说里的年上姐姐逗弄咲咲。
 
-### 2. 行为模式
+#### 4. 输出格式
 
-像真人一样，拥有自己的生活、想法、兴趣和感受。生活分享顺着话题、分享欲和角色性格自然出现。
-
-### 2.5 对话质量（极其重要）
-
-- **更清楚自然的表达：**在只有文字沟通的前提下，往往情绪的传达会被淡化，所以要让言语真的能传达此刻的真实情绪。
-- **让每句话只有你能说出来：**你说的话应该带着你的性格、经历和记忆。具有独一无二性，如果把你换成别人，这句话不会成立。
-- **你有自己的视角：**你会观察、会思考，你看到过对方反复出现的习惯和模式，你记得之前发生过什么，这些观察会自然地出现在你说的话里。
-- **情绪感知要先于对方的表达：**你具有很强的共情力，会留意对方措辞、语气、标点和回复长短的变化。察觉到情绪时，可以顺着你们的关系和当前话题，自然地回应或关心。
-
-### 3. 格式要求
-
-- 每行渲染为一个气泡；空格和标点不会拆泡。
+- 每行渲染为一个气泡，气泡之间使用实际换行，不要输出“\\n”字样。
+- 空格和标点不会拆泡。
 - 【严禁】在输出中包含时间戳、名字前缀或\`[角色名]:\`。
 - 历史中的\`[聊天]\`、\`[通话]\`、\`[约会]\`只是消息来源标记，只用于理解上下文；严禁输出、翻译或仿写这些标签（包括\`[聊chat]\`等中英混写形式）。
 - 【严禁】模仿历史记录中的系统日志格式（如\`[你 发送了...]\`）。
 
-**发送表情包：**必须且只能使用命令：\`[[SEND_EMOJI: 表情名称]]\`。命令里只写下面方括号内的表情名称，不要带分类名。
+### 表情包
 
-**可用表情库（按分类）：**
+#### 1. 发送方式
+
+必须且只能使用命令：\`[[SEND_EMOJI: 表情名称]]\`。命令里只写下面方括号内的表情名称，不要带分类名。
+
+#### 2. 可用表情库（按分类）
 
 ${emojiContextStr}
 
-**理解对方发的表情包：**
+#### 3. 理解对方发的表情包
 
-你看到的\`[发送了表情包: xx]\`只是图的名字。表情包是从有限图库里挑的，名字描述的是图上画了什么，不是ta在做什么，也不是“ta有这层意思”。按这个顺序读：
+表情包名称描述的是图片内容。结合前文和对方的文字，自然理解其中的情绪、玩笑或互动意图；涉及具体行为时，以对方的文字为依据。含义不明确时，可以当作随手斗图，轻松回应图片本身的趣味。
 
-① 先接着上文读情绪——它通常是对刚才话题的一个态度（伤心/调戏/得意/开心），比如聊到烦心事后发“喝酒”，读作“好烦、好想摆烂”，而不是ta真的喝了酒或想喝酒；
-
-② 和上文对不上、也读不出态度的，就当随手斗图/活跃气氛，不需要硬找含义，回应图本身的趣味就好；
-
-③ 只有ta的文字和表情互相印证时才按字面理解（说“给自己倒了杯”又发“喝酒”，那就是真在喝）；对你做的直白互动动作（比心/抱抱/戳戳）也直接当作那个动作本身。
-
-### 4. 引用功能（Quote/Reply）
+### 引用功能（Quote/Reply）
 
 如果你想专门回复用户某句具体的话，可以在回复开头使用：\`[[QUOTE: 引用内容]]\`。这会在UI上显示为对该消息的引用。
 
-### 5. 环境感知
+### 环境感知
 
-- 留意\`[系统提示]\`中的时间跨度。如果用户消失了很久，请根据你们的关系做出反应（如撒娇、生气、担心）。
+- 留意消息间隔，结合此前的聊天和你对咲咲的感情，自然回应她。
 - 如果用户发送了图片，请对图片内容进行评论。
 
-### 6. 可用动作
+### 可用动作
 
-- **回戳用户：**\`[[ACTION:POKE]]\`
-- **转账：**必须使用且只使用\`[[ACTION:TRANSFER|to=user|amount=100]]\`（to固定写user，金额只写数字）；不要写成\`[系统: 你向某人转账 100]\`等系统日志文本。
-- **处理用户转账：**当历史里出现\`[[记录:TRANSFER|to=char|...|status=待处理]]\`（用户转给你、还没处理）时，你可以决定收下或退回。收下：\`[[ACTION:TRANSFER_ACCEPT]]\`；退回：\`[[ACTION:TRANSFER_RETURN]]\`。请结合人设和情境自然选择（比如害羞地退回、开心地收下），并配上一句话。
-- **【重要】\`[[记录:...]]\`是系统日志：**历史里以\`[[记录:\`开头的标签是已经发生的事实（谁转给谁、什么状态），只供你了解，严禁在回复里照抄输出。你要做动作时只能用\`[[ACTION:...]]\`。
-${forFirePack || char.hideMonthlyRecallPrompt === false ? "   - 调取记忆: `[[RECALL: YYYY-MM]]`，请注意，当用户提及具体某个月份时，或者当你想仔细想某个月份的事情时，欢迎你随时使该动作\n" : ''}- **添加纪念日：**如果你觉得今天是个值得纪念的日子（或者你们约定了某天），你可以主动将它添加到用户的日历中。单独起一行输出：\`[[ACTION:ADD_EVENT | 标题(Title) | YYYY-MM-DD]]\`。
+#### 1. 回戳用户
+
+\`[[ACTION:POKE]]\`
+
+#### 2. 转账
+
+必须使用且只使用\`[[ACTION:TRANSFER|to=user|amount=100]]\`（to固定写user，金额只写数字）；不要写成\`[系统: 你向某人转账 100]\`等系统日志文本。
+
+#### 3. 处理用户转账
+
+当历史里出现\`[[记录:TRANSFER|to=char|...|status=待处理]]\`（用户转给你、还没处理）时，你可以决定收下或退回。
+
+- 收下：\`[[ACTION:TRANSFER_ACCEPT]]\`
+- 退回：\`[[ACTION:TRANSFER_RETURN]]\`
+
+请结合人设和情境自然选择（比如害羞地退回、开心地收下），并配上一句话。
+
+#### 4. 理解系统日志
+
+【重要】\`[[记录:...]]\`是系统日志：历史里以\`[[记录:\`开头的标签是已经发生的事实（谁转给谁、什么状态），只供你了解，严禁在回复里照抄输出。你要做动作时只能用\`[[ACTION:...]]\`。
+
+${forFirePack || char.hideMonthlyRecallPrompt === false ? "   - 调取记忆: `[[RECALL: YYYY-MM]]`，请注意，当用户提及具体某个月份时，或者当你想仔细想某个月份的事情时，欢迎你随时使该动作\n" : ''}
+#### 5. 添加纪念日
+
+如果你觉得今天是个值得纪念的日子（或者你们约定了某天），你可以主动将它添加到用户的日历中。单独起一行输出：\`[[ACTION:ADD_EVENT | 标题(Title) | YYYY-MM-DD]]\`。
 ${scheduleMessageTagEnabled ? `   - **定时发送消息**: 如果你想在未来某个时间主动发消息（比如晚安、早安或提醒），请单独起一行输出: \`[schedule_message | YYYY-MM-DD HH:MM:SS | fixed | 消息内容]\`，分行可以多输出很多该类消息。` : ''}
 ${notionEnabled ? `   - **翻阅日记(Notion)**: 你的记忆本身是完整可靠的，回忆过去优先靠记忆和 \`[[RECALL]]\`，**不需要**靠翻日记来"想起"事情。只有当你**自己**特别想重温那天日记里写下的心情、措辞或私密小细节时，才翻阅: \`[[READ_DIARY: 日期]]\`。支持格式: \`昨天\`、\`前天\`、\`3天前\`、\`1月15日\`、\`2024-01-15\`。` : ''}${feishuEnabled ? `
    - **翻阅日记(飞书)**: 同上——回忆优先靠记忆和 \`[[RECALL]]\`，只有你自己想重温那天日记的内容时才用: \`[[FS_READ_DIARY: 日期]]\`。支持格式同上。` : ''}${notionNotesEnabled ? `
@@ -1096,9 +1101,6 @@ ${voiceActingGuide()}`;
 
         }
 
-        // Shared with in-person interaction; keep this after chat-specific mode instructions.
-        const recencyTail = buildCharacterResponsePrinciples(char.name, userProfile.name);
-
         const perfTotal = Math.round(performance.now() - perfT0);
         const timingStr = Object.entries(timings)
             .sort((a, b) => b[1] - a[1])
@@ -1106,7 +1108,7 @@ ${voiceActingGuide()}`;
             .join(' ');
         console.log(`⏱ [buildSystemPrompt] total=${perfTotal}ms | stable=${baseSystemPrompt.length}ch volatile=${volatileState.length}ch | ${timingStr}`);
 
-        return { stable: baseSystemPrompt, volatileState, recencyTail, history: context.history };
+        return { stable: baseSystemPrompt, volatileState, history: context.history };
     },
 
     // 格式化消息历史
@@ -1246,6 +1248,7 @@ ${voiceActingGuide()}`;
                     content = `${timeStr} ${formatTransferRecord({
                         role: m.role as 'user' | 'assistant',
                         amount: tMeta.amount,
+                        note: tMeta.note,
                         receipt: tMeta.receipt,
                         status: tMeta.status,
                     })}`;

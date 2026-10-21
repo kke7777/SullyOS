@@ -12,7 +12,7 @@
 // 成「角色又开始每轮催了」：
 //   · 两处清单（平时聊天那份 / 到点那份）都带上「还没到点就别提前开口」；
 //   · 两处说的是同一句话——各写各的迟早漂成两套词，模型会当成两回事；
-//   · 清单块插在易变尾段之前，「回到你自己」钢印还是模型开口前的最后一眼。
+//   · 清单块插在易变尾段之前，当前状态与场景仍留在清单之后。
 
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -86,23 +86,23 @@ describe('排程清单不该被当成本轮待办', () => {
   });
 });
 
-describe('排程块的位置：钢印要留住最后一眼', () => {
-  const block = { role: 'system', content: '【你的主动消息排程·仅你可见】…' };
+describe('排程块的位置：保留易变尾段的顺序', () => {
+  const block = { role: 'system', content: '【主动消息排程·仅你可见】…' };
 
-  it('插在易变尾段之前，「回到你自己」还是最后一条', () => {
+  it('插在易变尾段之前，当前状态还是最后一条', () => {
     const messages = [
       { role: 'system', content: '稳定前缀' },
       { role: 'user', content: '在吗' },
-      { role: 'system', content: '易变尾段…### 最后，回到你自己' },
+      { role: 'system', content: '易变尾段：当前状态与场景' },
     ];
     const out = insertAmsg2TaskContextBlock(messages, block, 2);
     expect(out.map((m) => m.content)).toEqual([
       '稳定前缀',
       '在吗',
       block.content,
-      '易变尾段…### 最后，回到你自己',
+      '易变尾段：当前状态与场景',
     ]);
-    expect(out[out.length - 1].content).toContain('回到你自己');
+    expect(out[out.length - 1].content).toContain('当前状态与场景');
   });
 
   it('工具循环里下标照用：前缀没动，块仍落在尾段之前而不是 tool 结果后面', () => {

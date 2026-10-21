@@ -1,7 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { isStandaloneDisplayMode } from './iosStandalone';
 
-type Color = [number, number, number, number];
+export type StatusBarColor = [number, number, number, number];
+type Color = StatusBarColor;
 const EDGE_ID = 'sully-ios-status-bar-edge';
 const FALLBACK: Color = [15, 17, 21, 1];
 
@@ -53,7 +54,7 @@ export const createIOSStatusBarEdge = (): HTMLDivElement => {
 type Surface = { color: Color; image: string; width: number; height: number; opacity: number };
 
 /** Representative top color, not a screenshot or a promise of image continuity. */
-const readTopSurfaces = (edge: HTMLElement): Surface[] => {
+const readTopSurfaces = (edge: HTMLElement | null): Surface[] => {
     const elements = document.elementsFromPoint?.(Math.round(innerWidth / 2), 1) ?? [];
     const surfaces: Surface[] = [];
     for (const element of [...new Set([...elements, document.body, document.documentElement])]) {
@@ -110,6 +111,33 @@ const sampleImageTop = (url: string, width: number, height: number): Promise<Col
     image.src = url;
 });
 
+/** Shared sampling for icon contrast. Android still draws the actual wallpaper. */
+export const readStatusBarSurfaceColor = async (
+    imageColors: Map<string, Promise<Color | null>>,
+    edge: HTMLElement | null = null,
+): Promise<string> => {
+    const layers: Color[] = [];
+    for (const surface of readTopSurfaces(edge)) {
+        let imageColor: Color | null = null;
+        const url = surface.image.match(/^url\(["']?(.*?)["']?\)$/)?.[1];
+        if (url) {
+            const key = `${url}|${surface.width}|${surface.height}`;
+            if (!imageColors.has(key)) {
+                if (imageColors.size >= 12) imageColors.delete(imageColors.keys().next().value!);
+                imageColors.set(key, sampleImageTop(url, surface.width, surface.height));
+            }
+            imageColor = await imageColors.get(key)!;
+        } else if (surface.image.includes('gradient(')) {
+            const firstStop = surface.image.match(/rgba?\([^)]+\)|#[\da-f]{3,8}/i)?.[0];
+            imageColor = firstStop ? parseStatusBarColor(firstStop) : null;
+        }
+        if (imageColor) layers.push([imageColor[0], imageColor[1], imageColor[2], imageColor[3] * surface.opacity]);
+        layers.push([surface.color[0], surface.color[1], surface.color[2], surface.color[3] * surface.opacity]);
+        if (layers.some(color => color[3] === 1)) break;
+    }
+    return blendStatusBarColors(layers);
+};
+
 export const installIOSStatusBarEdge = (): (() => void) => {
     const noop = () => {};
     if (typeof document === 'undefined' || !document.body) return noop;
@@ -137,30 +165,9 @@ export const installIOSStatusBarEdge = (): (() => void) => {
     let disposed = false;
 
     const update = async (currentRevision: number) => {
-        const layers: Color[] = [];
-        for (const surface of readTopSurfaces(edge)) {
-            let imageColor: Color | null = null;
-            const url = surface.image.match(/^url\(["']?(.*?)["']?\)$/)?.[1];
-            if (url) {
-                const key = `${url}|${surface.width}|${surface.height}`;
-                if (!imageColors.has(key)) {
-                    if (imageColors.size >= 12) imageColors.delete(imageColors.keys().next().value!);
-                    imageColors.set(key, sampleImageTop(url, surface.width, surface.height));
-                }
-                imageColor = await imageColors.get(key)!;
-            } else if (surface.image.includes('gradient(')) {
-                // A gradient cannot be reproduced by a solid native status bar.
-                // Use its first computed stop as a stable representative color.
-                const firstStop = surface.image.match(/rgba?\([^)]+\)|#[\da-f]{3,8}/i)?.[0];
-                imageColor = firstStop ? parseStatusBarColor(firstStop) : null;
-            }
-            if (imageColor) layers.push([imageColor[0], imageColor[1], imageColor[2], imageColor[3] * surface.opacity]);
-            layers.push([surface.color[0], surface.color[1], surface.color[2], surface.color[3] * surface.opacity]);
-            if (layers.some(color => color[3] === 1)) break;
-        }
+        const color = await readStatusBarSurfaceColor(imageColors, edge);
         // A wallpaper load finishing after navigation must not repaint a chat header.
         if (disposed || revision !== currentRevision) return;
-        const color = blendStatusBarColors(layers);
         if (edge.style.backgroundColor !== color) edge.style.backgroundColor = color;
         if (contained && document.documentElement.style.getPropertyValue('--ios-status-bar-color') !== color) {
             document.documentElement.style.setProperty('--ios-status-bar-color', color);

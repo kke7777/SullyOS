@@ -513,6 +513,7 @@ export interface InstantChatSendResult {
  */
 export const sendInstantChatTurn = async (params: {
   signal?: AbortSignal;
+  onDispatch?: () => void;
   char: CharacterProfile;
   chatMessages: Array<{ role: string; content: unknown }>;
   /** 本地生成这一轮会用的凭据（effectiveApi），云端必须用同一份。 */
@@ -570,6 +571,7 @@ export const sendInstantChatTurn = async (params: {
     const { uuid } = await ActiveMsgClient.sendInstantChat({
       uuid: requestedUuid,
       signal: params.signal,
+      onDispatch: params.onDispatch,
       char: params.char,
       chatMessages: params.chatMessages,
       api: params.api,

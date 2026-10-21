@@ -6,7 +6,7 @@ import { CharacterProfile, CharacterBuff, UserProfile } from '../types';
 import type { DreamArchetype, DreamFragment, DreamScript, DreamLog } from '../types';
 import { ContextBuilder } from '../utils/context';
 import { injectMemoryPalace } from '../utils/memoryPalace/pipeline';
-import { isScheduleFeatureOn } from '../utils/scheduleGenerator';
+import { isEmotionFeatureOn } from '../utils/emotionFeature';
 import { isDevDebugAvailable } from '../utils/devDebug';
 import { useDreamSim, dreamSimStore } from '../utils/dreamSimStore';
 import { safeResponseJson } from '../utils/safeApi';
@@ -671,8 +671,8 @@ const DreamTheater: React.FC<{ char: CharacterProfile; onExit: () => void }> = (
         };
 
         // 情绪 buff —— 与 PersonaSim 一致，仅在该角色开启了日程/情绪系统时写入
-        const scheduleOn = isScheduleFeatureOn(char);
-        const newBuff: CharacterBuff | null = (scheduleOn && s.buff?.label) ? {
+        const emotionOn = isEmotionFeatureOn(char);
+        const newBuff: CharacterBuff | null = (emotionOn && s.buff?.label) ? {
             id: `buff_${Date.now()}`,
             name: s.buff.name || `dream_${Date.now()}`,
             label: s.buff.label,
@@ -1063,7 +1063,7 @@ const DreamTheater: React.FC<{ char: CharacterProfile; onExit: () => void }> = (
                         <p className="text-[14px] text-white/65 leading-loose max-w-[280px]" style={{ fontFamily: SERIF }}>{script.afterglow}</p>
                     )}
 
-                    {script?.buff?.label && isScheduleFeatureOn(char) && (
+                    {script?.buff?.label && isEmotionFeatureOn(char) && (
                         <div className="mt-7 flex items-center gap-2 px-4 py-2 rounded-2xl border" style={{ borderColor: `${script.buff.color || theme.accent}55`, background: `${script.buff.color || theme.accent}14` }}>
                             <span className="text-base">{script.buff.emoji || '✨'}</span>
                             <div className="text-left">

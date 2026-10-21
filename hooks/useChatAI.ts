@@ -1,3 +1,5 @@
+import { prepareImageGenerationContext, IMAGE_GENERATION_TOOL, IMAGE_TOOL_NAME, createImageGenerationSession } from '../utils/imageGeneration';
+import { putImageBlob } from '../utils/blobRef';
 import { resolveDialogueApi } from '../utils/characterApi';
 import { createReplyRun, withReplyCancellation } from '../utils/chatReplyCancellation';
 
@@ -14,9 +16,7 @@ import { ChatParser } from '../utils/chatParser';
 import { useMusic, loadMusicHooks } from '../context/MusicContext';
 import { processNewMessagesWithAutoArchive } from '../utils/memoryPalace/autoArchive';
 import { incrementDigestRound, runCognitiveDigestion, detectPersonalityStyle } from '../utils/memoryPalace';
-// evolveFlowNarrative 保留为低频深刷新备用，日常意识流由副 API 的情绪评估同轮产出（innerState 字段）
-// import { evolveFlowNarrative } from '../utils/scheduleGenerator';
-import { isScheduleFeatureOn } from '../utils/scheduleGenerator';
+import { isEmotionFeatureOn } from '../utils/emotionFeature';
 import type { DigestResult } from '../utils/memoryPalace';
 // 麦当劳: useChatAI 现在只读 McdMiniApp 当前快照注入 system prompt + 给 LLM 一个
 // UI 钩子工具 propose_cart_items。MCP 实际调用都在 McdMiniApp 组件内做, useChatAI
@@ -30,7 +30,8 @@ import { buildMcpOpenAITools, buildMcpRejectedToolsFallbackBody, buildMcpTextFal
 import { buildToolResultMessage, normalizeToolCallsForCompat } from '../utils/toolCallCompat';
 import { toolCallFingerprint } from '../utils/agenticToolFeedback';
 import { buildChatRequestPayload } from '../utils/chatRequestPayload';
-import { acquireChatReply, isChatReplyActive, subscribeChatReplies } from '../utils/chatReplyLock';
+import { createRecollectionDispatch } from '../utils/memoryPalace/recollectionSnapshot';
+import { acquireChatReply, getChatReplyPhase, subscribeChatReplies } from '../utils/chatReplyLock';
 import { prepareInboxBeforeChat } from '../utils/activeMsgRuntime';
 import { hasUnansweredUserTurn, withChatContinuation } from '../utils/chatContinuation';
 import { assertChatHasDialogue } from '../utils/chatRequestGuard';
@@ -521,7 +522,8 @@ export const useChatAI = ({
     const music = useMusic();
 
     const [localTyping, setLocalTyping] = useState(false);
-    const characterTyping = useSyncExternalStore(subscribeChatReplies, () => isChatReplyActive(char?.id), () => false);
+    const replyPhase = useSyncExternalStore(subscribeChatReplies, () => getChatReplyPhase(char?.id), () => null);
+    const characterTyping = replyPhase !== null;
     // 同一挂载实例仍串行使用流式预览状态；跨页面重进则读取角色的后台占位。
     const isTyping = localTyping || characterTyping;
     // 流式预览气泡：stream 开启时，已完成行与安全尾句随增量以临时气泡上屏。
@@ -821,7 +823,8 @@ export const useChatAI = ({
                     : instantChatReadiness.workerBundleCurrent === undefined ? 'sar-module-worker-unverified'
                         : null;
             const instantChatVeto: string | null = sarWorkerVeto
-                ?? (luckinChatOn ? 'luckin-chat'
+                ?? (char.chatImageGenerationEnabled ? 'image-generation'
+                : luckinChatOn ? 'luckin-chat'
                 : mcdMiniOpen ? 'mcd'
                     : luckinMiniOpen ? 'luckin'
                         : mcpWorkerUnreachable ? 'mcp-worker-unreachable' : null);
@@ -910,6 +913,7 @@ export const useChatAI = ({
             });
 
             const payload = await replyStep(async () => stageT('payload', buildChatRequestPayload({
+                signal: replyRun.signal,
                 char: charForGen, userProfile, groups, emojis, categories,
                 homePhoneContext:homePhoneContext?.(),
                 historyMsgs: contextMsgs,
@@ -928,9 +932,20 @@ export const useChatAI = ({
                 luckinChat: luckinChatOn ? luckinChatRef?.current : undefined,
                 timelyByWorker: instantChatRoute,
                 recallEntryPoint: 'chat_app',
-                onPreparationStage:event=>{if(event.status==='end')perfStages['payload.'+event.stage]=event.ms;},
+                onPreparationStage: event => {
+                    if (event.status === 'end') perfStages['payload.' + event.stage] = event.ms;
+                    if (event.stage === 'memory' && charForGen.memoryPalaceEnabled && !replyRun.signal.aborted) {
+                        releaseReply.setPhase(event.status === 'start' ? 'recollecting' : 'preparing');
+                    }
+                },
             })));
             const systemPrompt = payload.systemPrompt;
+            const saveRecollection = createRecollectionDispatch(payload.recollection);
+            const dispatchRecollection = () => {
+                replyRun.check();
+                releaseReply.setPhase('replying');
+                saveRecollection();
+            };
             const cleanedApiMessages = payload.cleanedApiMessages;
             // 在续说补丁和本地/即时对话分流前检查最终历史，不能用补出来的 user 掩盖空上下文。
             assertChatHasDialogue(payload.fullMessages);
@@ -940,6 +955,16 @@ export const useChatAI = ({
                     // 生成前收进来的主动消息落在用户刚发的那句之后：该回的是用户那句。
                     unansweredUserTurn: hasUnansweredUserTurn(currentMsgs, contextMsgs),
                 });
+            // Reference images and the tool guide exist only in this explicit foreground chat turn.
+            // Keep them out of emotion evaluation, proactive fire packs and persisted chat history.
+            const imageContext = await replyStep(() => prepareImageGenerationContext(
+                char.chatImageGenerationEnabled === true && !payload.flags.promptBuildSkipped,
+                apiConfig.imageGeneration,
+            ));
+            if (imageContext) {
+                fullMessages.splice(1, 0, { role: 'system', content: imageContext.guide });
+                if (imageContext.referenceMessage) fullMessages.splice(2, 0, imageContext.referenceMessage);
+            }
             const promptBuildSkipped = payload.flags.promptBuildSkipped;
             if (payload.flags.mcdActive) {
                 console.log(`🍔 [MCD-MiniApp] 注入协同点餐上下文 step=${mcdMiniSnap?.step} cartItems=${mcdMiniSnap?.cart?.length || 0} menuItems=${mcdMiniSnap?.menuMeals ? Object.keys(mcdMiniSnap.menuMeals).length : 0} nutrition=${mcdMiniSnap?.nutritionData ? mcdMiniSnap.nutritionData.length : 0}字`);
@@ -968,7 +993,7 @@ export const useChatAI = ({
             //      双跑双扣费. 见下方即时对话分支 + activeMsgRuntime.
             //    走哪条跟着 instantChatRoute（构建 payload 前冻结的同一回合终值）走，这里绝不自己
             //    再判一次，否则可能「按上云把评估打包走了，实际却走本地」，情绪底色悄悄停更。
-            const emotionEvalEnabled = !!(!promptBuildSkipped && !isEmotionEvalSkipped() && isScheduleFeatureOn(char) && char.emotionConfig?.enabled);
+            const emotionEvalEnabled = !!(!promptBuildSkipped && !isEmotionEvalSkipped() && isEmotionFeatureOn(char));
             // 评估跟随全局流式开关（专用情绪 API 自带 stream 字段时以它为准）
             const evalStream: boolean = !!(apiConfig.stream ?? false);
             const emotionApi = emotionEvalEnabled
@@ -1102,7 +1127,7 @@ export const useChatAI = ({
             // ⚠️ 工具模式(瑞幸点单/麦当劳)下绝不带 thinking/reasoning 参数: "thinking + tools" 同发
             //    Gemini 等会直接 400 INVALID_ARGUMENT —— 表现就是"开了思考链的角色一点单就报错,
             //    换个没开思考链的角色就好"。工具循环优先, 思考链这一轮让步。
-            const toolModeActive = payload.flags.luckinChatActive || payload.flags.mcdActive || payload.flags.luckinActive || payload.flags.mcpChatActive;
+            const toolModeActive = !!imageContext || payload.flags.luckinChatActive || payload.flags.mcdActive || payload.flags.luckinActive || payload.flags.mcpChatActive;
             // 主动消息 2.0 的工具本轮会不会注入：thinking 门要先知道这件事（工具在下面才真正
             // 拼进 tools，但参数取舍必须现在就定）。角色级开关关掉的不注入——否则被用户显式
             // 关掉的功能会被角色一次工具调用重新打开。
@@ -1154,7 +1179,7 @@ export const useChatAI = ({
                 const { tools: mcpTools, resolve } = buildMcpOpenAITools(char.id);
                 if (mcpTools.length) {
                     mcpToolResolve = resolve;
-                    const mcpOnly = !payload.flags.luckinChatActive && !payload.flags.mcdActive && !payload.flags.luckinActive;
+                    const mcpOnly = !imageContext && !payload.flags.luckinChatActive && !payload.flags.mcdActive && !payload.flags.luckinActive;
                     if (!getMcpUseNativeTools() && mcpOnly) {
                         // 用户已明确判断当前模型/中转不支持 tools：首轮直接走正文兼容模式。
                         const compatibilityBody = buildMcpRejectedToolsFallbackBody({
@@ -1169,6 +1194,32 @@ export const useChatAI = ({
                     }
                 }
             }
+            if (imageContext) {
+                baseReqBody.tools = [...(baseReqBody.tools || []), IMAGE_GENERATION_TOOL];
+                baseReqBody.tool_choice = 'auto';
+            }
+            const runImageTool = imageContext ? createImageGenerationSession(imageContext.config, async (result, prompt, referenceIds) => {
+                replyRun.check();
+                const imageRef = await replyStep(() => putImageBlob(result.blob));
+                const messageId = await replyStep(() => replyRun.saveMessage({
+                    charId: char.id, role: 'assistant', type: 'image', content: imageRef,
+                    metadata: { imageGeneration: { prompt, referenceIds, model: imageContext.config.model,
+                        size: imageContext.config.size, quality: imageContext.config.quality, costUsd: result.costUsd } },
+                }));
+                setMessages(await replyStep(() => DB.getRecentMessagesByCharId(char.id, 200)));
+                const galleryId = `generated-${char.id}-${messageId}`;
+                await DB.saveGalleryImage({ id: galleryId, charId: char.id, url: imageRef, timestamp: Date.now(), sourceMessageId: messageId });
+                if (replyRun.signal.aborted) { await DB.deleteGalleryImage(galleryId); replyRun.check(); }
+                if (result.costUsd !== undefined) addToast(`本次生图费用：$${result.costUsd.toFixed(4)}`, 'info');
+            }, replyRun.signal) : null;
+            const runImageToolCall = async (tc: any, args: any, loopMessages: any[]) => {
+                if (!runImageTool) return;
+                setSearchStatus('正在生成图片，请保持小手机在前台…');
+                try {
+                    const result = await replyStep(() => runImageTool(args));
+                    loopMessages.push(buildToolResultMessage(tc, result) as any);
+                } finally { setSearchStatus(''); }
+            };
             // 主动消息 2.0 本地工具：worker 已配置 + 角色没关掉时注入 schedule/cancel/renew/list，
             // 并注入「排程现状」背景块（常驻能力简介 + 进行中任务 + 到点没发的回执，角色自行判断怎么接）。
             // 是否注入在上面 thinking 门那里就算好了（amsg2ToolsInjected）。
@@ -1260,6 +1311,7 @@ export const useChatAI = ({
                 });
                 const instantChatResult = await replyStep(async () => sendInstantChatTurn({
                     signal: replyRun.signal,
+                    onDispatch: () => { replyRun.check(); dispatchRecollection(); },
                     char,
                     // 云端要发给模型的就是本地这一份，一个字不改（见 fire_pack 的 chat 段）。
                     chatMessages: (amsg2NoticesBlock
@@ -1391,7 +1443,7 @@ export const useChatAI = ({
                     signal: replyRun.signal,
                     method: 'POST', headers,
                     body: JSON.stringify({ ...baseReqBody, messages: withAmsg2TaskContext(baseReqBody.messages) })
-                }, 2, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: '聊天回复' }, streamHooks));
+                }, 2, 0, { appName: '消息', charId: char.id, charName: char.name, purpose: '聊天回复' }, streamHooks, dispatchRecollection));
             } catch (e) {
                 replyRun.check();
                 let requestError: unknown = e;
@@ -1498,6 +1550,10 @@ export const useChatAI = ({
                         // 主动消息 2.0 的排程工具与点单工具会在同一批 tool_calls 里出现:
                         // 先分流执行, 否则会落进下面的「畸形调用」分支被吃掉, 而续写请求
                         // 又不带 tools, 角色「点单时顺手排个提醒」就永远不会生效。
+                        if (fname === IMAGE_TOOL_NAME && runImageTool) {
+                            await runImageToolCall(tc, args, loopMessages);
+                            continue;
+                        }
                         const route = routeMiniAppToolCall(fname, args);
                         if (route === 'amsg2') {
                             await replyStep(async () => runAmsg2ToolCall(tc, fname, args, loopMessages, it));
@@ -1610,6 +1666,10 @@ export const useChatAI = ({
                         // 主动消息 2.0 的排程工具与点单工具会在同一批 tool_calls 里出现:
                         // 先分流执行, 否则会落进下面的「畸形调用」分支被吃掉, 而续写请求
                         // 又不带 tools, 角色「点单时顺手排个提醒」就永远不会生效。
+                        if (fname === IMAGE_TOOL_NAME && runImageTool) {
+                            await runImageToolCall(tc, args, loopMessages);
+                            continue;
+                        }
                         const route = routeMiniAppToolCall(fname, args);
                         if (route === 'amsg2') {
                             await replyStep(async () => runAmsg2ToolCall(tc, fname, args, loopMessages, it));
@@ -1695,7 +1755,7 @@ export const useChatAI = ({
             //       createOrder 被拦截 —— 下单付款必须用户在结账卡上点。
             //     · 通用 MCP: 工具名命中 mcpToolResolve 映射就分发给对应服务器 (utils/mcpClient),
             //       结果只回填循环不落卡片。两类工具可同时在场, 按名字各走各的。
-            if ((payload.flags.luckinChatActive || mcpToolResolve || amsg2ToolsInjected) && data.choices?.[0]?.message?.tool_calls?.length) {
+            if ((runImageTool || payload.flags.luckinChatActive || mcpToolResolve || amsg2ToolsInjected) && data.choices?.[0]?.message?.tool_calls?.length) {
                 // 普通点单/排程维持 6 轮；接了通用 MCP 时允许游戏/论坛类任务自然推进到
                 // 12 轮。模型正常给正文会立刻 break，并不是固定多发 12 次请求。
                 const MAX_LOOPS = mcpToolResolve ? MCP_CHAT_MAX_TOOL_LOOPS : 6;
@@ -1713,7 +1773,7 @@ export const useChatAI = ({
                         `private_${it}`,
                     );
                     if (!toolCalls || !toolCalls.length) break;
-                    if (mcpToolResolve && toolCalls.some((tc: any) => mcpToolResolve?.has(tc.function?.name || ''))) {
+                    if (toolCalls.some((tc: any) => (runImageTool && tc.function?.name === IMAGE_TOOL_NAME) || mcpToolResolve?.has(tc.function?.name || ''))) {
                         await replyStep(async () => persistMcpLeadIn(data.choices?.[0]?.message?.content || ''));
                     }
                     loopMessages.push({
@@ -1733,6 +1793,10 @@ export const useChatAI = ({
                             args = typeof raw === 'string' ? (raw ? JSON.parse(raw) : {}) : (raw || {});
                         } catch (e) {
                             console.warn('☕ [Luckin-Chat] 工具参数解析失败:', e);
+                        }
+                        if (fname === IMAGE_TOOL_NAME && runImageTool) {
+                            await runImageToolCall(tc, args, loopMessages);
+                            continue;
                         }
                         // 通用 MCP 工具: 命中映射直接分发, 不走下面的瑞幸逻辑
                         const mcpHit = mcpToolResolve?.get(fname);
@@ -1836,7 +1900,7 @@ export const useChatAI = ({
                     const amsg2Stalled = amsg2Stall.record(amsg2Outcomes);
                     // 转到上限还在要工具的话，最后那份响应里只有 tool_calls、没有正文——所以只要
                     // 挂着主动消息工具，到上限也得收尾，不能只管 MCP。
-                    const reachedHardLimit = (!!mcpToolResolve || amsg2ToolRounds > 0) && it + 1 >= MAX_LOOPS;
+                    const reachedHardLimit = (!!runImageTool || !!mcpToolResolve || amsg2ToolRounds > 0) && it + 1 >= MAX_LOOPS;
                     const stalled = !!mcpToolResolve && stalledMcpRounds >= MCP_CHAT_MAX_STALLED_ROUNDS;
                     const forceWrapUp = reachedHardLimit || stalled || amsg2Stalled;
                     if (forceWrapUp) {
@@ -2284,6 +2348,7 @@ export const useChatAI = ({
 
     return {
         isTyping,
+        replyPhase,
         streamingBubbles,
         streamingThinking,
         streamingHandoverIds,

@@ -24,14 +24,16 @@ describe('home schedule positions', () => {
         vi.spyOn(DB, 'getEmojis').mockResolvedValue([]);
         const save = vi.spyOn(DB, 'saveDailySchedule').mockResolvedValue(undefined);
         const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({choices: [{message: {content: JSON.stringify({slots: [
-            {startTime: '09:00', activity: '直播', homePosition: {kind: 'home', roomId: 'study'}},
+            {startTime: '09:00', activity: '直播', innerThought: 'LEGACY_SLOT', homePosition: {kind: 'home', roomId: 'study'}},
             {startTime: '14:00', activity: '外出', homePosition: {kind: 'away'}},
-        ]})}}]}), {headers: {'Content-Type': 'application/json'}}));
+        ], flowNarrative: {morning: 'LEGACY_AM', afternoon: 'LEGACY_PM', evening: 'LEGACY_NIGHT'}})}}]}), {headers: {'Content-Type': 'application/json'}}));
         vi.stubGlobal('fetch', fetch);
         const result = await generateDailyScheduleForChar({...char, scheduleStyle}, {name: 'U'} as UserProfile, config, true);
         expect(hasHomeSchedulePositions(result, char)).toBe(true);
         expect(save).toHaveBeenCalledOnce();
+        expect(JSON.stringify(result)).not.toMatch(/LEGACY_|flowNarrative|innerThought/);
         const messages=JSON.parse(fetch.mock.calls[0][1].body).messages;
+        expect(JSON.stringify(messages)).not.toMatch(/flowNarrative|意识流独白|三个时间段/);
         expect(messages.filter((message:{content:string})=>message.content.includes('每个 slots 项必须额外包含 homePosition'))).toHaveLength(1);
     });
     it('preserves the old schedule when generation omits positions', async () => {

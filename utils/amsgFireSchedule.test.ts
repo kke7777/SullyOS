@@ -182,8 +182,8 @@ describe('工具与说明块', () => {
   });
 
   it('规矩那一段接在说明块尾巴上', () => {
-    expect(buildFireScheduleBlock('native', { ...timeOpts, limitsBrief: '用户给你定的规矩：X' }))
-      .toMatch(/用户给你定的规矩：X$/);
+    expect(buildFireScheduleBlock('native', { ...timeOpts, limitsBrief: '排程限制：X' }))
+      .toMatch(/排程限制：X$/);
   });
 
   it('native 模式不教正文语法，text 模式才教', () => {

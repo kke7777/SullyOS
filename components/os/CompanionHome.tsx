@@ -1,3 +1,4 @@
+import { isEmotionFeatureOn } from '../../utils/emotionFeature';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowClockwise,
@@ -66,7 +67,6 @@ import {
 import { DB } from '../../utils/db';
 import { isChatPreviewMessage } from '../../utils/chatMessageVisibility';
 import { getLastInnerState } from '../../utils/emotionApply';
-import { getFlowNarrativeKey } from '../../utils/scheduleFeature';
 import { getDailyScheduleForChar } from '../../utils/dailySchedule';
 import { useLocalDateKey } from '../../hooks/useLocalDateKey';
 import { resolveCharTimeZone } from '../../utils/timezone';
@@ -562,11 +562,8 @@ const CompanionHome: React.FC = () => {
     ]).then(([recent, schedule]) => {
       if (cancelled) return;
       const latestAssistant = recent.messages[0];
-      const scheduleThought = schedule?.flowNarrative?.[
-        getFlowNarrativeKey(getScheduleWallClock(character).getHours())
-      ];
       setHudContent({
-        thought: compactCompanionHudText(getLastInnerState(character.id) || scheduleThought, '尚未记录心声'),
+        thought: compactCompanionHudText(isEmotionFeatureOn(character) ? getLastInnerState(character.id) : '', '尚未记录心声'),
         recentChat: compactCompanionHudText(latestAssistant?.content, '还没有聊天记录'),
         schedule,
       });
@@ -576,7 +573,7 @@ const CompanionHome: React.FC = () => {
       }
     });
     return () => { cancelled = true; };
-  }, [character?.id, character?.customTimezoneEnabled, character?.customTimezone, characterDateKey, isDataLoaded, lastMsgTimestamp, period.key]);
+  }, [character?.emotionConfig, character?.id, character?.customTimezoneEnabled, character?.customTimezone, characterDateKey, isDataLoaded, lastMsgTimestamp, period.key]);
 
   const currentScheduleSlot = useMemo(() => {
     const slots = hudContent.schedule?.slots || [];

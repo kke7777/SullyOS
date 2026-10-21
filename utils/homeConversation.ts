@@ -1,5 +1,6 @@
 import {makeDebugLogger} from './devDebug';
 import {resolveDialogueApi} from './characterApi';
+import {saveUsedRecollection} from './memoryPalace/recollectionSnapshot';
 const timingLog=makeDebugLogger('api','Home timing');
 import {awaitHomeStage} from './homeReplyStage';
 import {evaluateHomeReplyEmotion} from './homeReplyEmotion';
@@ -33,7 +34,7 @@ export function buildHomeScenePrompt(user:UserProfile,scene:HomeScene){
 }
 export async function buildHomeConversationPrompt(char:CharacterProfile,user:UserProfile,scene:HomeScene,history:Message[]=[],regenerating=false){
  const parts=await ChatPrompts.buildSystemPromptParts(char,user,[],[],[],history,undefined,regenerating?'':undefined,null,false,undefined,undefined,{appRules:''});
- return parts.stable+parts.volatileState+buildHomeScenePrompt(user,scene)+parts.recencyTail;
+ return parts.stable+parts.volatileState+buildHomeScenePrompt(user,scene);
 }
 export type HomeConversationContext = Pick<BuildChatPayloadInput,'realtimeConfig'|'musicSnapshot'> & Partial<Pick<BuildChatPayloadInput,'groups'|'emojis'|'categories'>>;
 export interface HomeReplyRequest {secretOrigin?:SecretNoteOriginPromise;context?:HomeConversationContext;char:CharacterProfile;user:UserProfile;api:APIConfig;scene:HomeScene;records:HomeRecord[];signal:AbortSignal;regenerating?:boolean;initiative?:boolean;automatic?:boolean;onStage?:(stage:string)=>void}
@@ -120,9 +121,12 @@ export async function generateHomeReply(args:HomeReplyRequest):Promise<HomeReply
  timingLog.info('上下文准备完成，启动主回复与情绪评估',{ms:Math.round(performance.now()-started)});
  if(signal.aborted)throw new DOMException('已取消','AbortError');
  args.onStage?.('等待角色回复');
+ const requestBody=JSON.stringify({model:api.model,messages,temperature:api.temperature??.8,max_tokens:2500,stream:false});
+ signal.throwIfAborted();
+ saveUsedRecollection(payload.recollection);
  const request=fetch(`${api.baseUrl.replace(/\/+$/,'')}/chat/completions`,{
   method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${api.apiKey||'sk-none'}`},signal,
-  body:JSON.stringify({model:api.model,messages,temperature:api.temperature??.8,max_tokens:2500,stream:false}),
+  body:requestBody,
   __sullyMeta:{appName:'3D家园',charId:char.id,charName:char.name,purpose:'家园交流'},
  } as RequestInit);
  void evaluateHomeReplyEmotion(args,messages);
