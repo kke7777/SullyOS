@@ -7,8 +7,8 @@ android {
         applicationId "com.kke7777.nuomi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 19
-        versionName "1.6.10-prompt1020"
+        versionCode 20
+        versionName "1.6.11-louise1021"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
