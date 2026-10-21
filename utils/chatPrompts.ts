@@ -185,23 +185,17 @@ export const ChatPrompts = {
         return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
     },
 
-    // 格式化时间差提示（tz 影响「深夜/清晨」判断，时差本身不变）
-    getTimeGapHint: (lastMsg: Message | undefined, currentTimestamp: number, tz?: string): string => {
+    // 格式化消息间隔提示：只报告绝对时长；保留时区参数以兼容现有调用。
+    getTimeGapHint: (lastMsg: Message | undefined, currentTimestamp: number, _tz?: string): string => {
         if (!lastMsg) return '';
         const diffMs = currentTimestamp - lastMsg.timestamp;
         const diffMins = Math.floor(diffMs / (1000 * 60));
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const currentHour = nowInTimeZone(tz, new Date(currentTimestamp)).getHours();
-        const isNight = currentHour >= 23 || currentHour <= 6;
-        if (diffMins < 10) return ''; 
-        if (diffMins < 60) return `[系统提示: 距离上一条消息: ${diffMins} 分钟。短暂的停顿。]`;
-        if (diffHours < 6) {
-            if (isNight) return `[系统提示: 距离上一条消息: ${diffHours} 小时。现在是深夜/清晨。沉默是正常的（正在睡觉）。]`;
-            return `[系统提示: 距离上一条消息: ${diffHours} 小时。用户离开了一会儿。]`;
-        }
-        if (diffHours < 24) return `[系统提示: 距离上一条消息: ${diffHours} 小时。很长的间隔。]`;
+        if (diffMins < 10) return '';
+        if (diffMins < 60) return `[系统提示: 距离上一条消息过去了 ${diffMins} 分钟。]`;
+        if (diffHours < 24) return `[系统提示: 距离上一条消息过去了 ${diffHours} 小时。]`;
         const days = Math.floor(diffHours / 24);
-        return `[系统提示: 距离上一条消息: ${days} 天。用户消失了很久。请根据你们的关系做出反应（想念、生气、担心或冷漠）。]`;
+        return `[系统提示: 距离上一条消息过去了 ${days} 天。]`;
     },
 
     // 按角色可见性过滤表情包分类与表情。
@@ -713,7 +707,7 @@ ${emojiContextStr}
 
 ### 环境感知
 
-- 留意\`[系统提示]\`中的时间跨度。如果用户消失了很久，请根据你们的关系做出反应（如撒娇、生气、担心）。
+- 留意消息间隔，结合此前的聊天和你对咲咲的感情，自然回应她。
 - 如果用户发送了图片，请对图片内容进行评论。
 
 ### 可用动作
